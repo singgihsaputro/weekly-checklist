@@ -1,6 +1,7 @@
 # Weekly Checklist
 
-React + Express + SQLite. One process, one port, one file of data.
+React + Express + SQLite (via libSQL). Runs off a local file on your machine,
+off a hosted [Turso](https://turso.tech) database when `TURSO_DATABASE_URL` is set.
 
 ## Local
 
@@ -16,19 +17,22 @@ npm run build
 npm start          # http://localhost:3001
 ```
 
-Env: `PORT` (default 3001), `DB_PATH` (default `./data.db`).
+Env: `PORT` (default 3001), `DB_PATH` (default `./data.db`),
+`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (use a hosted DB instead of the local file).
 
 ## Hosting
 
-`better-sqlite3` is a native module and SQLite is a **file on disk**. So the host must give you
-a persistent disk and a long-running process.
+Two shapes work:
 
 | Host | Works? | Why |
 |---|---|---|
+| Vercel | yes | serverless + Turso, no disk needed — see below |
 | VPS (DigitalOcean, Hetzner, Linode, EC2) | yes | full disk, see below |
 | Render / Railway / Fly.io | yes | attach a persistent volume, point `DB_PATH` at it |
-| Vercel / Netlify / Cloudflare Pages | **no** | serverless, ephemeral filesystem — data is lost every deploy |
 | Shared cPanel hosting | usually no | needs Node 18+ and a persistent process |
+
+Serverless hosts have an ephemeral filesystem, so a SQLite **file** is lost on every deploy.
+Set `TURSO_DATABASE_URL` and the data lives in Turso instead, and Vercel works fine.
 
 Build and start commands are the same everywhere:
 
@@ -38,6 +42,32 @@ npm start                   # start
 ```
 
 Env vars: `PORT` (host usually sets it), `DB_PATH` (point at the persistent disk).
+
+### Vercel
+
+The frontend is served from the CDN; `api/index.js` runs the express app as one serverless
+function (`vercel.json` routes every `/api/*` request to it). No disk, so the data goes to Turso.
+
+1. Create the database — [install the CLI](https://docs.turso.tech/cli/installation), then:
+
+   ```bash
+   turso auth signup
+   turso db create weekly-checklist
+   turso db show weekly-checklist --url        # -> TURSO_DATABASE_URL
+   turso db tokens create weekly-checklist     # -> TURSO_AUTH_TOKEN
+   ```
+
+   The `tasks` table creates itself on the first request.
+
+2. On [vercel.com/new](https://vercel.com/new), import this repo. The Vite preset is detected;
+   leave the build settings alone.
+
+3. Add both env vars from step 1 (Settings → Environment Variables), then deploy.
+
+Redeploys never touch the data — it lives in Turso, not in the build.
+
+**The API has no auth**, so anyone with the URL can read and delete every task. Fine for a
+private link, not for anything you'd mind losing.
 
 ### Render
 
@@ -126,7 +156,8 @@ Backup = `cp data.db data.db.bak` (or `sqlite3 data.db ".backup out.db"` while r
 
 ## Database
 
-SQLite. Single table:
+SQLite, reached through `@libsql/client` — a local file in dev, Turso in production.
+Single table:
 
 | column | meaning |
 |---|---|
