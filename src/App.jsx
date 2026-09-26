@@ -172,6 +172,22 @@ function Routines({ me, reloads }) {
         </span>
       </div>
 
+      {me.notes?.length > 0 && (
+        <motion.section
+          className="notes"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.2, 0.8, 0.3, 1] }}
+        >
+          <h2>Catatan minggu ini</h2>
+          <ul>
+            {me.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </motion.section>
+      )}
+
       <motion.div
         className={daily ? 'grid one' : 'grid'}
         initial="hidden"

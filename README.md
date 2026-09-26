@@ -225,9 +225,15 @@ The twelve routines come in two kinds, listed in the order the day happens:
 
 | kind | items | levels |
 |---|---|---|
-| `sholat` | Shubuh, Dhuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
-| `done` | Puasa Sunnah, Mandi Pagi, Sholat Tahajud, Mengaji Pagi, Olahraga Pagi, Mengaji Petang, Tidur Sebelum Jam 10 | `done` |
+| `sholat` | the five wajib: Shubuh, Dhuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
+| `done` | the other twenty-one, sunnah prayers included | `done` |
 | `haid` | Dalam haid | `haid` |
+
+Twenty-six routines in all. **Only the five wajib prayers carry the three-level
+scale.** The sunnah prayers — tahajud, dhuha, every qobliyah and badiyah — are
+`done`, because on-time and in-the-masjid do not apply to them and folding them in
+would distort the wajib statistics: the streak, the on-time rate and the
+per-prayer chart all count five prayers a day, not sixteen.
 
 `ROUTINES` is listed in the order the day happens, and that order is what the UI
 renders — moving a line moves it on screen. Keys never change when a label does,
@@ -249,11 +255,11 @@ Setting the flag writes **one** row, not nine. Whatever is not performed during
 haid is then excused for that day, leaving both the numerator and the denominator
 everywhere it appears.
 
-| Excused | Still counts |
+| Excused (17) | Still counts (9) |
 |---|---|
-| The five prayers, Sholat Tahajud, Puasa Sunnah, Mengaji Pagi, Mengaji Petang | Mandi Pagi, Olahraga Pagi, Tidur Sebelum Jam 10 |
+| Every prayer, wajib and sunnah · Puasa Sunnah · Baca Quran · Mengaji Petang | Mandi sebelum Shubuh · Mandi Pagi · Al-Matsurat · Olahraga · Makan real food · Stop heavy meal · Baca & menulis · Baca buku anak · Tidur sebelum jam 10 |
 
-So the day scores out of **three** rather than twelve, the rates for those
+So the day scores out of **nine** rather than twenty-six, the rates for those
 routines count 29 days instead of 30, and a haid day neither extends a streak nor
 breaks it. They are not owed, so counting them as missed would be wrong.
 
@@ -428,3 +434,13 @@ want to *do*.
 It is built from tables and inline styles, because Gmail strips `<style>` blocks
 and renders neither flexbox nor grid. Nothing depends on images loading — the logo
 is decorative and the layout holds without it.
+
+## Weekly notes
+
+`WEEKLY_NOTES` in `server.js`, served from `/api/me` and shown above every week.
+They are standing reminders rather than things to tick off — weekly targets or
+open-ended intentions — so a daily checkbox would have been the wrong shape for
+them, and a wrong shape is worse than no feature.
+
+They are the same every week. Making them editable per week would mean another
+table and another write path; it is a few lines when it is actually wanted.

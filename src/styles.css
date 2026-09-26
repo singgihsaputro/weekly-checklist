@@ -486,3 +486,30 @@ html, body { overscroll-behavior-y: contain; }
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ---- the week's standing reminders ---------------------------------------- */
+
+.notes {
+  background: #f6f4ef;
+  border: 1px solid #e8e2d4;
+  border-left: 3px solid #b9a888;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+.notes h2 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a7a5c;
+  margin: 0 0 8px;
+}
+.notes ul { margin: 0; padding-left: 18px; }
+.notes li { font-size: 14px; line-height: 1.6; padding: 1px 0; }
+.notes li::marker { color: #b9a888; }
+
+@media (max-width: 560px) {
+  .notes { padding: 12px 14px; }
+  .notes li { font-size: 13.5px; }
+}

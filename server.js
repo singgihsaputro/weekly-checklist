@@ -46,18 +46,42 @@ const ROUTINES = [
   // haidExcused: not performed during haid, so on such a day it is neither owed
   // nor missed. Marked per routine rather than inferred from the kind, because
   // which ones are excused is a religious question, not a mechanical one.
+  { key: 'mandi_sebelum_subuh', label: 'Mandi sebelum Shubuh', kind: 'done' },
   { key: 'puasa_sunnah', label: 'Puasa Sunnah', kind: 'done', haidExcused: true },
   { key: 'mandi_pagi', label: 'Mandi Pagi', kind: 'done' },
   { key: 'sholat_tahajud', label: 'Sholat Tahajud', kind: 'done', haidExcused: true },
+  { key: 'qobliyah_subuh', label: 'Sholat Qobliyah Shubuh', kind: 'done', haidExcused: true },
   { key: 'sholat_subuh', label: 'Sholat Shubuh', kind: 'sholat', haidExcused: true },
-  { key: 'mengaji_subuh', label: 'Mengaji Pagi', kind: 'done', haidExcused: true },
+  { key: 'baca_quran', label: 'Baca Quran dan maknai artinya', kind: 'done', haidExcused: true },
+  { key: 'almasurat', label: 'Baca Al-Matsurat pagi & petang', kind: 'done' },
   { key: 'olahraga_pagi', label: 'Olahraga Pagi', kind: 'done' },
+  { key: 'makan_real_food', label: 'Makan real food', kind: 'done' },
+  { key: 'sholat_dhuha', label: 'Sholat Dhuha', kind: 'done', haidExcused: true },
+  { key: 'qobliyah_dhuhur', label: 'Sholat Qobliyah Dhuhur', kind: 'done', haidExcused: true },
   { key: 'sholat_dzuhur', label: 'Sholat Dhuhur', kind: 'sholat', haidExcused: true },
+  { key: 'badiyah_dhuhur', label: 'Sholat Badiyah Dhuhur', kind: 'done', haidExcused: true },
+  { key: 'qobliyah_ashar', label: 'Sholat Qobliyah Ashar', kind: 'done', haidExcused: true },
   { key: 'sholat_ashar', label: 'Sholat Ashar', kind: 'sholat', haidExcused: true },
   { key: 'sholat_maghrib', label: 'Sholat Maghrib', kind: 'sholat', haidExcused: true },
+  { key: 'badiyah_maghrib', label: 'Sholat Badiyah Maghrib', kind: 'done', haidExcused: true },
   { key: 'mengaji_maghrib', label: 'Mengaji Petang', kind: 'done', haidExcused: true },
+  { key: 'stop_heavy_meal', label: 'Stop heavy meal', kind: 'done' },
+  { key: 'baca_menulis', label: 'Baca 30 menit & menulis', kind: 'done' },
+  { key: 'qobliyah_isya', label: 'Sholat Qobliyah Isya', kind: 'done', haidExcused: true },
   { key: 'sholat_isya', label: 'Sholat Isya', kind: 'sholat', haidExcused: true },
+  { key: 'badiyah_isya', label: 'Sholat Badiyah Isya', kind: 'done', haidExcused: true },
+  { key: 'baca_buku_anak', label: 'Baca buku buat anak', kind: 'done' },
   { key: 'tidur_sebelum_10', label: 'Tidur Sebelum Jam 10', kind: 'done' },
+]
+
+// Shown above every week. Standing reminders rather than things to tick off —
+// they are weekly or open-ended, so a daily checkbox would be the wrong shape.
+const WEEKLY_NOTES = [
+  'Dengarkan ceramah online dan catat — 3x seminggu',
+  'Baca buku ke anak 20 menit sehari: 10 menit di waktu luang, 10 menit malam sebelum tidur, dan bahasa Inggris',
+  'Ajak Byuna sholat wajib dan sunnah, dan ngaji bersama',
+  'Ajarkan Byuna ngaji, saling hafalan dan murojaah',
+  'Jangan lupa bersyukur dan happy — jangan punya penyakit hati atau sakit hati',
 ]
 ROUTINES.find((r) => r.key === 'sholat_isya').kind = 'sholat'
 
@@ -313,7 +337,13 @@ app.post('/api/logout', (req, res) => {
 app.get(
   '/api/me',
   auth(async (req, res) =>
-    res.json({ email: req.email, name: USERS[req.email].name, users: roster(), routines: ROUTINES })
+    res.json({
+      email: req.email,
+      name: USERS[req.email].name,
+      users: roster(),
+      routines: ROUTINES,
+      notes: WEEKLY_NOTES,
+    })
   )
 )
 

@@ -144,8 +144,10 @@ try {
   assert.deepEqual(rosterOf(TITIS).levels.done, ['done'], 'the plain routines are the same for both')
   assert.deepEqual(rosterOf(TITIS).levels.haid, ['haid'], 'haid is hers')
   assert.deepEqual(rosterOf(SINGGIH).levels.haid, [], 'and does not apply to him at all')
-  assert.equal(me.routines.length, 13, 'twelve routines plus the haid flag')
-  assert.equal(me.routines.filter((r) => r.kind === 'sholat').length, 5)
+  assert.equal(me.routines.length, 27, 'twenty-six routines plus the haid flag')
+  assert.equal(me.routines.filter((r) => r.kind === 'sholat').length, 5, 'only the wajib five carry the scale')
+  assert.ok(me.notes.length >= 5, 'the week carries its standing reminders')
+  assert.ok(me.notes.some((n) => n.includes('ceramah')), 'and they are the ones asked for')
   assert.ok(
     me.routines.some((r) => r.key === 'tidur_sebelum_10' && r.kind === 'done'),
     'the catalogue carries the non-sholat routines'
@@ -218,7 +220,7 @@ try {
   assert.equal(mine.last30.prayed, 2, 'prayed counts every level')
   assert.equal(mine.last30.possible, 150, '30 days x 5 prayers — habits are not in this number')
   assert.equal(mine.byPrayer.find((p) => p.item === 'sholat_subuh').ontime, 1)
-  assert.equal(mine.byRoutine.length, 7, 'the seven other routines are reported')
+  assert.equal(mine.byRoutine.length, 21, 'every non-prayer routine is reported')
   assert.equal(mine.byRoutine.find((r) => r.item === 'olahraga_pagi').done, 1)
   assert.equal(mine.byRoutine.find((r) => r.item === 'mandi_pagi').done, 0)
   assert.equal(mine.byRoutine.find((r) => r.item === 'tidur_sebelum_10').possible, 30)
@@ -265,12 +267,12 @@ try {
     const him = report.people.find((p) => p.email === SINGGIH)
     // he ended the run with subuh on time, maghrib in the masjid, and two habits
     assert.equal(him.kept, 4, `counts what was recorded, got ${him.kept}`)
-    assert.equal(him.total, 12)
+    assert.equal(him.total, 26)
     assert.equal(him.onTime, 2, 'ontime and masjid both count as on time')
     assert.equal(him.masjid, 1)
-    assert.equal(him.missed.length, 8, 'and names what was missed')
+    assert.equal(him.missed.length, 22, 'and names what was missed')
     assert.ok(him.missed.includes('Mandi Pagi'))
-    assert.match(report.text, /Singgih — 4\/12 routines/)
+    assert.match(report.text, /Singgih — 4\/26 routines/)
     assert.match(report.text, /in the masjid/)
     assert.ok(!report.html.includes('<script'), 'the html is escaped')
 
@@ -310,9 +312,10 @@ try {
     // an excused routine loses the day from its denominator too...
     assert.equal(after.byRoutine.find((r) => r.item === 'puasa_sunnah').possible, 29, 'puasa is excused')
     assert.equal(after.byRoutine.find((r) => r.item === 'sholat_tahajud').possible, 29, 'tahajud is excused')
-    assert.equal(after.byRoutine.find((r) => r.item === 'mengaji_subuh').possible, 29, 'mengaji is excused')
+    assert.equal(after.byRoutine.find((r) => r.item === 'baca_quran').possible, 29, 'baca quran is excused')
     // ...while the ones that carry on regardless keep all thirty
     assert.equal(after.byRoutine.find((r) => r.item === 'mandi_pagi').possible, 30, 'mandi still counts')
+    assert.equal(after.byRoutine.find((r) => r.item === 'almasurat').possible, 30, 'dzikir still counts')
     assert.equal(after.byRoutine.find((r) => r.item === 'olahraga_pagi').possible, 30, 'olahraga still counts')
     assert.equal(after.byRoutine.find((r) => r.item === 'tidur_sebelum_10').possible, 30, 'sleep still counts')
 
