@@ -346,3 +346,36 @@ passive listener and the page would scroll out from under the gesture. It only
 engages at `scrollY === 0` pulling downwards, applies resistance so it never feels
 loose, and needs 64px before it fires. `overscroll-behavior-y: contain` keeps the
 browser's own overscroll from competing.
+
+## The 9pm report
+
+`GET /api/cron/daily-report` composes both days and emails them. Vercel's
+scheduler calls it, authenticating with `CRON_SECRET` as a bearer token — and if
+that variable is unset the endpoint refuses everyone, the scheduler included,
+rather than falling open.
+
+Vercel cron schedules are **UTC**, so 21:00 in Jakarta is `0 14 * * *`. On the
+Hobby plan a cron fires approximately rather than to the minute; if you need it
+exactly at nine, point an external scheduler at the same URL with the same bearer
+token.
+
+Add `?dry=1` to render the report as JSON without sending it, and `?date=` to
+build one for a past day. Both still need the bearer token.
+
+`buildReport` is a pure function exported from `server.js`, so the wording is
+tested without a database or an inbox.
+
+### Why Brevo
+
+Sending needs a verified sender, and verification normally means proving you own
+a domain. This app lives on a `vercel.app` subdomain, so there is no domain to
+prove. Brevo verifies a **single address** with a code it emails you, which is the
+only free path that does not require DNS.
+
+Set `BREVO_API_KEY`, `REPORT_FROM` (the verified address) and `REPORT_TO` (comma
+separated). Sending *from* a gmail.com address does not satisfy DMARC alignment,
+so the first message may land in spam — mark it as not spam once, or add the
+sender to contacts, and it settles.
+
+The email is laid out with tables and inline styles, not flexbox, because Gmail
+does not render flexbox reliably.

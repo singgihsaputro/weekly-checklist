@@ -463,6 +463,129 @@ app.get(
   })
 )
 
+// ---- the nightly report ----------------------------------------------------
+
+const dayOffset = (week, date) =>
+  Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${week}T12:00:00Z`)) / 86400000)
+
+// Pure, so it can be tested without a database or an inbox.
+export const buildReport = ({ date, rows, tasks }) => {
+  const level = (email, item) =>
+    rows.find((r) => r.email === email && r.date === date && r.item === item)?.level || ''
+  const day = dayOffset(mondayOf(date), date)
+  const mine = tasks.filter((t) => t.day === day)
+
+  const people = Object.entries(USERS).map(([email, user]) => {
+    const kept = ROUTINES.filter((r) => level(email, r.key)).length
+    const missed = ROUTINES.filter((r) => !level(email, r.key)).map((r) => r.label)
+    const sholat = SHOLAT.map((r) => level(email, r.key))
+    return {
+      email,
+      name: user.name,
+      kept,
+      total: ROUTINES.length,
+      onTime: sholat.filter((l) => ON_TIME.has(l)).length,
+      late: sholat.filter((l) => l === 'sholat').length,
+      masjid: sholat.filter((l) => l === 'masjid').length,
+      missed,
+    }
+  })
+
+  const pretty = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  })
+
+  const lines = [`Daily Routines — ${pretty}`, '']
+  for (const p of people) {
+    lines.push(`${p.name} — ${p.kept}/${p.total} routines`)
+    lines.push(
+      `  Sholat: ${p.onTime}/${SHOLAT.length} on time` +
+        (p.masjid ? ` (${p.masjid} in the masjid)` : '') +
+        (p.late ? `, ${p.late} late` : '')
+    )
+    lines.push(p.missed.length ? `  Missed: ${p.missed.join(', ')}` : '  Nothing missed — a clean day.')
+    lines.push('')
+  }
+  lines.push(`Tasks: ${mine.filter((t) => t.done).length}/${mine.length} done`)
+
+  const esc = (v) => String(v).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.6;color:#37352f;max-width:520px">
+  <h2 style="margin:0 0 4px;font-size:19px">Daily Routines</h2>
+  <p style="margin:0 0 20px;color:#787774">${esc(pretty)}</p>
+  ${people
+    .map(
+      (p) => `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e9e9e7;border-radius:10px;margin-bottom:12px">
+    <tr><td style="padding:14px 16px">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="font-weight:700">${esc(p.name)}</td>
+          <td align="right" style="color:#787774">${p.kept}/${p.total}</td>
+        </tr>
+      </table>
+      <p style="margin:8px 0 0">Sholat <strong>${p.onTime}/${SHOLAT.length}</strong> on time${
+        p.masjid ? ` &middot; ${p.masjid} in the masjid` : ''
+      }${p.late ? ` &middot; ${p.late} late` : ''}</p>
+      <p style="margin:6px 0 0;color:#787774;font-size:14px">${
+        p.missed.length ? `Missed: ${esc(p.missed.join(', '))}` : 'Nothing missed &mdash; a clean day.'
+      }</p>
+    </td></tr>
+  </table>`
+    )
+    .join('')}
+  <p style="color:#787774;font-size:14px">Tasks ${mine.filter((t) => t.done).length}/${mine.length} done</p>
+</div>`
+
+  return { subject: `Daily Routines — ${pretty}`, text: lines.join('\n'), html, people }
+}
+
+const sendEmail = async ({ subject, text, html }) => {
+  const to = (process.env.REPORT_TO || '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean)
+  if (!process.env.BREVO_API_KEY || !process.env.REPORT_FROM || !to.length)
+    throw new Error('email is not configured')
+
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sender: { email: process.env.REPORT_FROM, name: 'Daily Routines' },
+      to: to.map((email) => ({ email })),
+      subject,
+      textContent: text,
+      htmlContent: html,
+    }),
+  })
+  if (!res.ok) throw new Error(`brevo ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  return to
+}
+
+// Vercel's scheduler calls this with the CRON_SECRET as a bearer token. No secret
+// configured means nobody gets in, including the scheduler.
+app.get(
+  '/api/cron/daily-report',
+  route(async (req, res) => {
+    const secret = process.env.CRON_SECRET
+    if (!secret || req.headers.authorization !== `Bearer ${secret}`) return res.sendStatus(401)
+
+    const date = isDate(req.query.date) ? req.query.date : today()
+    const week = mondayOf(date)
+    const [rows, tasks] = await Promise.all([
+      all('SELECT * FROM routine WHERE date = ?', [date]),
+      all('SELECT * FROM tasks WHERE week = ?', [week]),
+    ])
+    const report = buildReport({ date, rows, tasks })
+
+    // ?dry=1 renders it without sending, for checking the wording
+    if (req.query.dry) return res.json({ date, ...report })
+    res.json({ date, sent: await sendEmail(report) })
+  })
+)
+
 // on Vercel the static build is served by the CDN, not by express
 if (!process.env.VERCEL) {
   if (process.env.NODE_ENV === 'production') {

@@ -31,6 +31,7 @@ Object.assign(process.env, {
   PORT: '3399',
   APP_TZ: 'UTC',
   SESSION_SECRET: 'test-secret-not-a-real-one',
+  CRON_SECRET: 'test-cron-secret',
   GOOGLE_CLIENT_ID: CLIENT_ID,
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
   OAUTH_TOKEN_ENDPOINT: 'http://127.0.0.1:3398/token',
@@ -38,7 +39,7 @@ Object.assign(process.env, {
 })
 delete process.env.TURSO_DATABASE_URL
 
-await import('./server.js')
+const { buildReport } = await import('./server.js')
 
 const base = 'http://localhost:3399'
 let cookie = ''
@@ -241,6 +242,40 @@ try {
   assert.equal(after.byUser[TITIS].last30.ontime, 1, 'writes land on the signed-in user')
   assert.equal(after.byUser[TITIS].last30.masjid, 0, 'she has no masjid prayers')
   assert.equal(after.byUser[SINGGIH].last30.ontime, 2, "and not on the other's")
+
+  // ---- the nightly report -------------------------------------------------
+  {
+    const saved = cookie
+    cookie = '' // the cron runs with no session at all
+
+    const bearer = (token) => call('/api/cron/daily-report?dry=1', { headers: token ? { authorization: token } : {} })
+    assert.equal((await bearer(null)).status, 401, 'the report needs the cron secret')
+    assert.equal((await bearer('Bearer wrong')).status, 401, 'and the right one')
+
+    const r = await bearer('Bearer test-cron-secret')
+    assert.equal(r.status, 200, 'the scheduler gets in')
+    const report = await r.json()
+    assert.match(report.subject, /^Daily Routines — /)
+    assert.equal(report.people.length, 2, 'both people are in the report')
+
+    const him = report.people.find((p) => p.email === SINGGIH)
+    // he ended the run with subuh on time, maghrib in the masjid, and two habits
+    assert.equal(him.kept, 4, `counts what was recorded, got ${him.kept}`)
+    assert.equal(him.total, 12)
+    assert.equal(him.onTime, 2, 'ontime and masjid both count as on time')
+    assert.equal(him.masjid, 1)
+    assert.equal(him.missed.length, 8, 'and names what was missed')
+    assert.ok(him.missed.includes('Mandi pagi'))
+    assert.match(report.text, /Singgih — 4\/12 routines/)
+    assert.match(report.text, /in the masjid/)
+    assert.ok(!report.html.includes('<script'), 'the html is escaped')
+
+    // a day nobody touched still renders, rather than throwing
+    const empty = await (await bearer('Bearer test-cron-secret')).json()
+    assert.ok(empty.text.length > 0)
+
+    cookie = saved
+  }
 
   // ---- logout -------------------------------------------------------------
   assert.equal((await call('/api/logout', { method: 'POST' })).status, 204)
