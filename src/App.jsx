@@ -227,11 +227,11 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
   const onHaid = (email) => levelOf(email, 'haid') === 'haid'
 
   // Which routines a person owes today: the ones their account has at all, minus
-  // the haid flag itself (a state, not an achievement), minus the prayers on a
-  // haid day — they are not owed, so they must not read as missed.
+  // the haid flag itself (a state, not an achievement), minus whatever that day
+  // excuses — those are not owed, so they must not read as missed.
   const owedBy = (levels, haid) =>
     me.routines.filter(
-      (r) => r.kind !== 'haid' && (levels[r.kind] || []).length > 0 && !(haid && r.kind === 'sholat')
+      (r) => r.kind !== 'haid' && (levels[r.kind] || []).length > 0 && !(haid && r.haidExcused)
     )
 
   const scoreFor = (email, levels) => {
@@ -316,8 +316,8 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
                     const level = levelOf(email, r.key)
                     const label = `${who} · ${r.label} on ${iso}`
                     const allowed = levels[r.kind]
-                    // on a haid day the prayers are excused, not missed
-                    const excused = haid && r.kind === 'sholat'
+                    // on a haid day these are excused, not missed
+                    const excused = haid && r.haidExcused
                     return (
                       <label
                         key={r.key}

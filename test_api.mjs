@@ -307,8 +307,14 @@ try {
       29,
       'per-prayer denominators drop as well'
     )
-    // the habits still count — only the prayers are excused
-    assert.equal(after.byRoutine.find((r) => r.item === 'puasa_sunnah').possible, 30)
+    // an excused routine loses the day from its denominator too...
+    assert.equal(after.byRoutine.find((r) => r.item === 'puasa_sunnah').possible, 29, 'puasa is excused')
+    assert.equal(after.byRoutine.find((r) => r.item === 'sholat_tahajud').possible, 29, 'tahajud is excused')
+    assert.equal(after.byRoutine.find((r) => r.item === 'mengaji_subuh').possible, 29, 'mengaji is excused')
+    // ...while the ones that carry on regardless keep all thirty
+    assert.equal(after.byRoutine.find((r) => r.item === 'mandi_pagi').possible, 30, 'mandi still counts')
+    assert.equal(after.byRoutine.find((r) => r.item === 'olahraga_pagi').possible, 30, 'olahraga still counts')
+    assert.equal(after.byRoutine.find((r) => r.item === 'tidur_sebelum_10').possible, 30, 'sleep still counts')
 
     const him = (await json('/api/stats')).byUser[SINGGIH]
     assert.equal(him.last30.possible, 150, 'his days are untouched by her flag')

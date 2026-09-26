@@ -245,11 +245,21 @@ and an empty list means the routine is neither shown nor writable. That is how
 `masjid` stays Singgih's and `haid` stays Titis's — one rule, enforced on the
 server, not two special cases in the UI.
 
-Setting the flag writes **one** row, not five. The prayers are then excused for
-that day: they leave both the numerator and the denominator, everywhere —
-the day's score becomes out of seven rather than twelve, per-prayer rates count
-29 days instead of 30, and a haid day neither extends a streak nor breaks it.
-Prayers are not owed, so counting them as missed would be wrong.
+Setting the flag writes **one** row, not nine. Whatever is not performed during
+haid is then excused for that day, leaving both the numerator and the denominator
+everywhere it appears.
+
+| Excused | Still counts |
+|---|---|
+| The five prayers, Sholat Tahajud, Puasa Sunnah, Mengaji Pagi, Mengaji Petang | Mandi Pagi, Olahraga Pagi, Tidur Sebelum Jam 10 |
+
+So the day scores out of **three** rather than twelve, the rates for those
+routines count 29 days instead of 30, and a haid day neither extends a streak nor
+breaks it. They are not owed, so counting them as missed would be wrong.
+
+Which routines are excused is marked per routine with `haidExcused`, not inferred
+from the kind — it is a religious question, and a rule derived from the data model
+would quietly get it wrong the next time a routine is added.
 
 Any prayer marks already recorded for that day are **kept**, not deleted. Clearing
 the flag brings them back.

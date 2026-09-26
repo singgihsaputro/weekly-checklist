@@ -43,17 +43,20 @@ const levelsFor = (email, kind) => {
 const ROUTINES = [
   // governs the whole day, so it sits above everything it affects
   { key: 'haid', label: 'Dalam haid', kind: 'haid' },
-  { key: 'puasa_sunnah', label: 'Puasa Sunnah', kind: 'done' },
+  // haidExcused: not performed during haid, so on such a day it is neither owed
+  // nor missed. Marked per routine rather than inferred from the kind, because
+  // which ones are excused is a religious question, not a mechanical one.
+  { key: 'puasa_sunnah', label: 'Puasa Sunnah', kind: 'done', haidExcused: true },
   { key: 'mandi_pagi', label: 'Mandi Pagi', kind: 'done' },
-  { key: 'sholat_tahajud', label: 'Sholat Tahajud', kind: 'done' },
-  { key: 'sholat_subuh', label: 'Sholat Shubuh', kind: 'sholat' },
-  { key: 'mengaji_subuh', label: 'Mengaji Pagi', kind: 'done' },
+  { key: 'sholat_tahajud', label: 'Sholat Tahajud', kind: 'done', haidExcused: true },
+  { key: 'sholat_subuh', label: 'Sholat Shubuh', kind: 'sholat', haidExcused: true },
+  { key: 'mengaji_subuh', label: 'Mengaji Pagi', kind: 'done', haidExcused: true },
   { key: 'olahraga_pagi', label: 'Olahraga Pagi', kind: 'done' },
-  { key: 'sholat_dzuhur', label: 'Sholat Dhuhur', kind: 'sholat' },
-  { key: 'sholat_ashar', label: 'Sholat Ashar', kind: 'sholat' },
-  { key: 'sholat_maghrib', label: 'Sholat Maghrib', kind: 'sholat' },
-  { key: 'mengaji_maghrib', label: 'Mengaji Petang', kind: 'done' },
-  { key: 'sholat_isya', label: 'Sholat Isya', kind: 'sholat' },
+  { key: 'sholat_dzuhur', label: 'Sholat Dhuhur', kind: 'sholat', haidExcused: true },
+  { key: 'sholat_ashar', label: 'Sholat Ashar', kind: 'sholat', haidExcused: true },
+  { key: 'sholat_maghrib', label: 'Sholat Maghrib', kind: 'sholat', haidExcused: true },
+  { key: 'mengaji_maghrib', label: 'Mengaji Petang', kind: 'done', haidExcused: true },
+  { key: 'sholat_isya', label: 'Sholat Isya', kind: 'sholat', haidExcused: true },
   { key: 'tidur_sebelum_10', label: 'Tidur Sebelum Jam 10', kind: 'done' },
 ]
 ROUTINES.find((r) => r.key === 'sholat_isya').kind = 'sholat'
@@ -68,7 +71,7 @@ const appliesTo = (email, item, haid) => {
   const r = BY_KEY[item]
   if (!r || r.kind === 'haid') return false // the flag is a state, not an achievement
   if (!levelsFor(email, r.kind).length) return false
-  return !(haid && r.kind === 'sholat')
+  return !(haid && r.haidExcused)
 }
 
 const roster = () =>
@@ -455,12 +458,10 @@ app.get(
         }
       })
 
-      const byRoutine = HABITS.map(({ key, label }) => ({
-        item: key,
-        label,
-        done: last30.filter((d) => at(email, d, key)).length,
-        possible: last30.length,
-      }))
+      const byRoutine = HABITS.map(({ key, label, haidExcused }) => {
+        const days = haidExcused ? owed(last30) : last30
+        return { item: key, label, done: days.filter((d) => at(email, d, key)).length, possible: days.length }
+      })
 
       // consecutive days back from today with all five prayers on time. A haid
       // day neither extends the streak nor breaks it — it is simply skipped.
