@@ -238,8 +238,11 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
 /* two columns when the card is wide enough, one when it is not */
 .routine-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 16px; }
 .routine-list label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.routine-list label.plain { cursor: pointer; }
+/* one control column, whether it holds a dropdown or a box */
+.routine-list .ctl { flex: 0 0 136px; display: flex; justify-content: flex-end; }
 .routine-list select {
-  flex: 0 1 136px;
+  width: 100%;
   min-width: 0;
   padding: 4px 6px;
   font: inherit;
@@ -250,6 +253,8 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
   border-radius: 6px;
 }
 .routine-list select:disabled { background: var(--card); opacity: 0.75; }
+.routine-list input[type='checkbox'] { width: 19px; height: 19px; margin: 0 7px 0 0; cursor: pointer; }
+.routine-list input[type='checkbox']:disabled { cursor: default; opacity: 0.55; }
 
 /* the week view shows a score per person; tapping it opens that day */
 .summary {
@@ -402,7 +407,9 @@ body { -webkit-tap-highlight-color: transparent; }
   /* 16px or iOS zooms the page when the picker opens */
   .routine-list { grid-template-columns: 1fr; gap: 8px; }
   .routine-list label { font-size: 15px; }
-  .routine-list select { font-size: 16px; padding: 8px; flex: 0 1 180px; }
+  .routine-list .ctl { flex: 0 0 180px; }
+  .routine-list select { font-size: 16px; padding: 8px; }
+  .routine-list input[type='checkbox'] { width: 24px; height: 24px; margin-right: 10px; }
   .summary { padding: 10px 8px; font-size: 15px; }
   .viewtoggle button { padding: 8px 16px; font-size: 15px; }
 

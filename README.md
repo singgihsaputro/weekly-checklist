@@ -228,7 +228,9 @@ The twelve routines come in two kinds, listed in the order the day happens:
 | `sholat` | Subuh, Dzuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
 | `done` | Mengaji pagi, Olahraga pagi, Mandi pagi, Mandi sore, Mengaji habis Maghrib, Makan, Minum vitamin | `done` |
 
-The catalogue is served from `/api/me`, so the client never carries its own copy.
+The control follows the kind: a prayer gets a dropdown because it has a scale to
+pick from, a habit gets a checkbox because it only has two states. The catalogue
+is served from `/api/me`, so the client never carries its own copy.
 `masjid` is allowed **only for Singgih** — the roster says who may use which levels
 for which kind, and `PUT /api/routines` enforces it, so the browser cannot talk its
 way past it. The kinds do not share a scale either: a habit cannot be `masjid` and
@@ -308,10 +310,10 @@ stick" in the installed app, sign in once from inside it rather than from Safari
 
 ## Week view versus day view
 
-Twelve routines times two people is twenty-four dropdowns per day. Rendered seven
+Twelve routines times two people is twenty-four controls per day. Rendered seven
 times over, the week view stopped being readable — so it is not rendered that way.
 The week shows one progress ring and a score per person per day, and tapping either
-opens that day. The day view is where the dropdowns live. Entry happens one day at
+opens that day. The day view is where the controls live. Entry happens one day at
 a time; the week is for looking.
 
 ## Motion

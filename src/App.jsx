@@ -283,22 +283,36 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
               <div className="routine-list">
                 {me.routines.map((r) => {
                   const level = levelOf(email, r.key)
+                  const label = `${who} · ${r.label} on ${iso}`
                   return (
-                    <label key={r.key}>
+                    <label key={r.key} className={r.kind === 'done' ? 'plain' : ''}>
                       <span>{r.label}</span>
-                      <select
-                        className={`lv-${level || 'none'}`}
-                        value={level}
-                        disabled={!mine || future}
-                        onChange={(e) => onLevel(iso, r.key, e.target.value || null)}
-                        aria-label={`${who} · ${r.label} on ${iso}`}
-                      >
-                        {['', ...levels[r.kind]].map((key) => (
-                          <option key={key || 'none'} value={key}>
-                            {LEVEL_INFO[key].label}
-                          </option>
-                        ))}
-                      </select>
+                      <span className="ctl">
+                        {/* a scale needs a scale; done-or-not only needs a box */}
+                        {r.kind === 'done' ? (
+                          <input
+                            type="checkbox"
+                            checked={level === 'done'}
+                            disabled={!mine || future}
+                            onChange={(e) => onLevel(iso, r.key, e.target.checked ? 'done' : null)}
+                            aria-label={label}
+                          />
+                        ) : (
+                          <select
+                            className={`lv-${level || 'none'}`}
+                            value={level}
+                            disabled={!mine || future}
+                            onChange={(e) => onLevel(iso, r.key, e.target.value || null)}
+                            aria-label={label}
+                          >
+                            {['', ...levels[r.kind]].map((key) => (
+                              <option key={key || 'none'} value={key}>
+                                {LEVEL_INFO[key].label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </span>
                     </label>
                   )
                 })}
