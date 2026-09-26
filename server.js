@@ -478,15 +478,16 @@ export const buildReport = ({ date, rows, tasks }) => {
   const people = Object.entries(USERS).map(([email, user]) => {
     const kept = ROUTINES.filter((r) => level(email, r.key)).length
     const missed = ROUTINES.filter((r) => !level(email, r.key)).map((r) => r.label)
-    const sholat = SHOLAT.map((r) => level(email, r.key))
+    const sholat = SHOLAT.map((r) => ({ label: r.label.replace('Sholat ', ''), level: level(email, r.key) }))
     return {
       email,
       name: user.name,
       kept,
       total: ROUTINES.length,
-      onTime: sholat.filter((l) => ON_TIME.has(l)).length,
-      late: sholat.filter((l) => l === 'sholat').length,
-      masjid: sholat.filter((l) => l === 'masjid').length,
+      sholat,
+      onTime: sholat.filter((p) => ON_TIME.has(p.level)).length,
+      late: sholat.filter((p) => p.level === 'sholat').length,
+      masjid: sholat.filter((p) => p.level === 'masjid').length,
       missed,
     }
   })
@@ -497,7 +498,9 @@ export const buildReport = ({ date, rows, tasks }) => {
     month: 'long',
     timeZone: 'UTC',
   })
+  const tasksDone = mine.filter((t) => t.done).length
 
+  // ---- plain text, for clients that show it and for anyone who prefers it ----
   const lines = [`Daily Routines — ${pretty}`, '']
   for (const p of people) {
     lines.push(`${p.name} — ${p.kept}/${p.total} routines`)
@@ -509,58 +512,123 @@ export const buildReport = ({ date, rows, tasks }) => {
     lines.push(p.missed.length ? `  Missed: ${p.missed.join(', ')}` : '  Nothing missed — a clean day.')
     lines.push('')
   }
-  lines.push(`Tasks: ${mine.filter((t) => t.done).length}/${mine.length} done`)
+  lines.push(`Tasks: ${tasksDone}/${mine.length} done`)
+  lines.push('')
+  lines.push(appUrl())
 
-  const esc = (v) => String(v).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.6;color:#37352f;max-width:520px">
-  <h2 style="margin:0 0 4px;font-size:19px">Daily Routines</h2>
-  <p style="margin:0 0 20px;color:#787774">${esc(pretty)}</p>
-  ${people
-    .map(
-      (p) => `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e9e9e7;border-radius:10px;margin-bottom:12px">
-    <tr><td style="padding:14px 16px">
+  // ---- html ----------------------------------------------------------------
+  // Tables and inline styles throughout: Gmail strips <style> blocks and does not
+  // render flexbox or grid. Nothing here depends on images loading.
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const INK = '#37352f'
+  const MUTED = '#787774'
+  const LINE = '#e6e5e1'
+  const TONE = {
+    masjid: { bg: '#1c5cab', fg: '#ffffff' },
+    ontime: { bg: '#2e7d52', fg: '#ffffff' },
+    sholat: { bg: '#b98a3a', fg: '#ffffff' },
+    '': { bg: '#eceae6', fg: '#9a9994' },
+  }
+
+  const bar = (kept, total) => {
+    const pct = Math.round((kept / total) * 100)
+    return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#eceae6;border-radius:999px">
+      <tr>
+        <td width="${pct}%" height="9" style="background:#2e7d52;border-radius:999px;font-size:0;line-height:0">&nbsp;</td>
+        <td height="9" style="font-size:0;line-height:0">&nbsp;</td>
+      </tr>
+    </table>`
+  }
+
+  const pills = (p) =>
+    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>${p.sholat
+      .map((x, i) => {
+        const t = TONE[x.level] || TONE['']
+        return `${i ? '<td width="6" style="font-size:0">&nbsp;</td>' : ''}<td align="center" style="background:${t.bg};color:${t.fg};border-radius:7px;padding:7px 0;font-size:12px;font-weight:700;letter-spacing:.3px">${esc(
+          x.label.slice(0, 2)
+        )}</td>`
+      })
+      .join('')}</tr></table>`
+
+  const card = (p) => `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff;border:1px solid ${LINE};border-radius:14px;margin-bottom:14px">
+    <tr><td style="padding:18px 20px">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
         <tr>
-          <td style="font-weight:700">${esc(p.name)}</td>
-          <td align="right" style="color:#787774">${p.kept}/${p.total}</td>
+          <td style="font-size:17px;font-weight:700;color:${INK}">${esc(p.name)}</td>
+          <td align="right" style="font-size:17px;font-weight:700;color:${p.kept === p.total ? '#2e7d52' : INK}">${p.kept}<span style="color:${MUTED};font-weight:400">/${p.total}</span></td>
         </tr>
       </table>
-      <p style="margin:8px 0 0">Sholat <strong>${p.onTime}/${SHOLAT.length}</strong> on time${
-        p.masjid ? ` &middot; ${p.masjid} in the masjid` : ''
-      }${p.late ? ` &middot; ${p.late} late` : ''}</p>
-      <p style="margin:6px 0 0;color:#787774;font-size:14px">${
-        p.missed.length ? `Missed: ${esc(p.missed.join(', '))}` : 'Nothing missed &mdash; a clean day.'
+      <div style="height:10px;font-size:0">&nbsp;</div>
+      ${bar(p.kept, p.total)}
+      <div style="height:16px;font-size:0">&nbsp;</div>
+      ${pills(p)}
+      <div style="height:12px;font-size:0">&nbsp;</div>
+      <p style="margin:0;font-size:14px;color:${INK}">
+        <strong>${p.onTime}/${SHOLAT.length}</strong> sholat on time${p.masjid ? ` &middot; <span style="color:#1c5cab;font-weight:600">${p.masjid} in the masjid</span>` : ''}${p.late ? ` &middot; <span style="color:#b98a3a">${p.late} late</span>` : ''}
+      </p>
+      <p style="margin:6px 0 0;font-size:13px;color:${MUTED}">${
+        p.missed.length ? `Missed: ${esc(p.missed.join(', '))}` : '&#10003; Nothing missed &mdash; a clean day.'
       }</p>
     </td></tr>
   </table>`
-    )
-    .join('')}
-  <p style="color:#787774;font-size:14px">Tasks ${mine.filter((t) => t.done).length}/${mine.length} done</p>
+
+  const button = (href, label, primary) =>
+    `<a href="${esc(href)}" style="display:inline-block;background:${primary ? '#225a44' : '#ffffff'};color:${primary ? '#ffffff' : INK};border:1px solid ${primary ? '#225a44' : LINE};text-decoration:none;padding:12px 20px;border-radius:9px;font-size:14px;font-weight:600">${esc(label)}</a>`
+
+  const url = appUrl()
+  const html = `<div style="margin:0;padding:24px 12px;background:#f4f4f2">
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" width="100%" style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${INK}">
+    <tr><td style="padding:0 4px 18px">
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="42" style="padding-right:12px"><img src="${esc(url)}/icon-192.png" width="42" height="42" alt="" style="display:block;border-radius:11px"></td>
+          <td>
+            <div style="font-size:19px;font-weight:700;line-height:1.2">Daily Routines</div>
+            <div style="font-size:13px;color:${MUTED}">${esc(pretty)}</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+    <tr><td>${people.map(card).join('')}</td></tr>
+    <tr><td style="padding:2px 4px 20px;font-size:14px;color:${MUTED}">
+      Shared tasks &mdash; <strong style="color:${INK}">${tasksDone}/${mine.length}</strong> done
+    </td></tr>
+    <tr><td align="center" style="padding:4px 0 22px">
+      ${button(`${url}/`, 'Open today', true)}
+      <span style="display:inline-block;width:10px">&nbsp;</span>
+      ${button(`${url}/#/dashboard`, 'See analytics', false)}
+    </td></tr>
+    <tr><td align="center" style="font-size:12px;color:#9a9994;padding-top:6px;border-top:1px solid ${LINE}">
+      Sent every night at 9pm.
+    </td></tr>
+  </table>
 </div>`
 
   return { subject: `Daily Routines — ${pretty}`, text: lines.join('\n'), html, people }
 }
 
+const appUrl = () =>
+  (process.env.APP_URL || 'https://weekly-checklist-xnk2.vercel.app').replace(/\/+$/, '')
+
+// Gmail over SMTP: no third-party sender to verify, and it arrives from a real
+// address, so it is not fighting DMARC the way a relayed gmail.com From would.
 const sendEmail = async ({ subject, text, html }) => {
   const to = (process.env.REPORT_TO || '')
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean)
-  if (!process.env.BREVO_API_KEY || !process.env.REPORT_FROM || !to.length)
-    throw new Error('email is not configured')
+  const user = process.env.GMAIL_USER
+  const pass = process.env.GMAIL_APP_PASSWORD
+  if (!user || !pass || !to.length) throw new Error('email is not configured')
 
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sender: { email: process.env.REPORT_FROM, name: 'Daily Routines' },
-      to: to.map((email) => ({ email })),
-      subject,
-      textContent: text,
-      htmlContent: html,
-    }),
+  const { default: nodemailer } = await import('nodemailer')
+  const mail = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user, pass },
   })
-  if (!res.ok) throw new Error(`brevo ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  await mail.sendMail({ from: `Daily Routines <${user}>`, to: to.join(', '), subject, text, html })
   return to
 }
 

@@ -365,17 +365,28 @@ build one for a past day. Both still need the bearer token.
 `buildReport` is a pure function exported from `server.js`, so the wording is
 tested without a database or an inbox.
 
-### Why Brevo
+### Why Gmail SMTP
 
-Sending needs a verified sender, and verification normally means proving you own
-a domain. This app lives on a `vercel.app` subdomain, so there is no domain to
-prove. Brevo verifies a **single address** with a code it emails you, which is the
-only free path that does not require DNS.
+Every hosted email service wants a verified sender, and verification normally
+means proving you own a domain. This app has no domain, only a `vercel.app`
+subdomain. Sending through Gmail sidesteps that entirely: no third-party account,
+nothing to verify, and the mail genuinely comes from the address in the `From`
+header rather than being relayed by someone else — so it is not fighting DMARC
+alignment and is far less likely to be filtered.
 
-Set `BREVO_API_KEY`, `REPORT_FROM` (the verified address) and `REPORT_TO` (comma
-separated). Sending *from* a gmail.com address does not satisfy DMARC alignment,
-so the first message may land in spam — mark it as not spam once, or add the
-sender to contacts, and it settles.
+Set `GMAIL_USER` and `GMAIL_APP_PASSWORD` (an App Password from
+<https://myaccount.google.com/apppasswords>, which needs 2-step verification on
+first — the account password will not work), plus `REPORT_TO`.
 
-The email is laid out with tables and inline styles, not flexbox, because Gmail
-does not render flexbox reliably.
+Gmail's SMTP limit is around 500 recipients a day. This sends two a night.
+
+### Writing the email
+
+Email clients run no JavaScript, so nothing in the message can be interactive.
+What it does instead: a progress bar and five colour-coded prayer pills give the
+day at a glance, and two buttons link back into the app for anything you actually
+want to *do*.
+
+It is built from tables and inline styles, because Gmail strips `<style>` blocks
+and renders neither flexbox nor grid. Nothing depends on images loading — the logo
+is decorative and the layout holds without it.
