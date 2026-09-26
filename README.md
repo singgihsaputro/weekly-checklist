@@ -365,20 +365,22 @@ build one for a past day. Both still need the bearer token.
 `buildReport` is a pure function exported from `server.js`, so the wording is
 tested without a database or an inbox.
 
-### Why Gmail SMTP
+### Why Brevo
 
-Every hosted email service wants a verified sender, and verification normally
-means proving you own a domain. This app has no domain, only a `vercel.app`
-subdomain. Sending through Gmail sidesteps that entirely: no third-party account,
-nothing to verify, and the mail genuinely comes from the address in the `From`
-header rather than being relayed by someone else — so it is not fighting DMARC
-alignment and is far less likely to be filtered.
+Sending needs a verified sender, and verification normally means proving you own a
+domain. This app has no domain, only a `vercel.app` subdomain. Brevo confirms a
+**single address** with a code it emails you, which is the free path that needs no
+DNS. Its API is plain HTTP, so there is no SMTP client to carry either.
 
-Set `GMAIL_USER` and `GMAIL_APP_PASSWORD` (an App Password from
-<https://myaccount.google.com/apppasswords>, which needs 2-step verification on
-first — the account password will not work), plus `REPORT_TO`.
+Set `BREVO_API_KEY`, `REPORT_FROM` (the address you verified) and `REPORT_TO`
+(comma separated).
 
-Gmail's SMTP limit is around 500 recipients a day. This sends two a night.
+The free plan is 300 emails a day. This sends two a night.
+
+Two things to expect: a new Brevo account needs a one-time manual approval before
+sending unlocks, and mail relayed *from* a gmail.com address does not satisfy
+DMARC alignment, so the first one may be filtered — mark it as not spam once, or
+add the sender to contacts, and it settles.
 
 ### Writing the email
 

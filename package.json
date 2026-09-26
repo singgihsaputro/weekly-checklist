@@ -10,8 +10,7 @@
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "express": "^4.21.1",
-    "framer-motion": "^13.4.4",
-    "nodemailer": "^10.0.10"
+    "framer-motion": "^13.4.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",

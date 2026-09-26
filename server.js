@@ -610,25 +610,30 @@ export const buildReport = ({ date, rows, tasks }) => {
 const appUrl = () =>
   (process.env.APP_URL || 'https://weekly-checklist-xnk2.vercel.app').replace(/\/+$/, '')
 
-// Gmail over SMTP: no third-party sender to verify, and it arrives from a real
-// address, so it is not fighting DMARC the way a relayed gmail.com From would.
+// Brevo verifies a single sender address with an emailed code, so this works
+// without owning a domain — which matters, since the app lives on a vercel.app
+// subdomain. Plain HTTP, no SMTP client to carry.
 const sendEmail = async ({ subject, text, html }) => {
   const to = (process.env.REPORT_TO || '')
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean)
-  const user = process.env.GMAIL_USER
-  const pass = process.env.GMAIL_APP_PASSWORD
-  if (!user || !pass || !to.length) throw new Error('email is not configured')
+  const key = process.env.BREVO_API_KEY
+  const from = process.env.REPORT_FROM
+  if (!key || !from || !to.length) throw new Error('email is not configured')
 
-  const { default: nodemailer } = await import('nodemailer')
-  const mail = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: { user, pass },
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': key, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      sender: { email: from, name: 'Daily Routines' },
+      to: to.map((email) => ({ email })),
+      subject,
+      textContent: text,
+      htmlContent: html,
+    }),
   })
-  await mail.sendMail({ from: `Daily Routines <${user}>`, to: to.join(', '), subject, text, html })
+  if (!res.ok) throw new Error(`brevo ${res.status}: ${(await res.text()).slice(0, 300)}`)
   return to
 }
 
