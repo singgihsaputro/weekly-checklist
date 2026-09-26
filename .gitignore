@@ -5,3 +5,4 @@ data.db*
 compare_lokalise.py
 .vercel
 .env*
+!.env.example
