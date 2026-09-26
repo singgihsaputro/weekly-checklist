@@ -237,8 +237,23 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
 
 /* two columns when the card is wide enough, one when it is not */
 .routine-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 16px; }
-.routine-list label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.routine-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: 7px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
 .routine-list label.plain { cursor: pointer; }
+.routine-list label:hover { background: var(--hover); }
+.routine-list .name { flex: 1; min-width: 0; }
+
+/* the status column: shape first, colour second */
+.status { flex: none; display: inline-flex; width: 18px; height: 18px; }
+.status svg { display: block; }
 /* one control column, whether it holds a dropdown or a box */
 .routine-list .ctl { flex: 0 0 136px; display: flex; justify-content: flex-end; }
 .routine-list select {
@@ -253,7 +268,13 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
   border-radius: 6px;
 }
 .routine-list select:disabled { background: var(--card); opacity: 0.75; }
-.routine-list input[type='checkbox'] { width: 19px; height: 19px; margin: 0 7px 0 0; cursor: pointer; }
+.routine-list input[type='checkbox'] {
+  width: 19px;
+  height: 19px;
+  margin: 0 7px 0 0;
+  accent-color: #2e7d52; /* match the status icon it drives */
+  cursor: pointer;
+}
 .routine-list input[type='checkbox']:disabled { cursor: default; opacity: 0.55; }
 
 /* the week view shows a score per person; tapping it opens that day */
@@ -283,7 +304,7 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
 /* the level still reads at a glance, the words just carry it now */
 .lv-none { color: var(--muted); }
 .lv-sholat { color: #8a6d3b; }
-.lv-ontime { color: #2e7d52; }
+.lv-ontime, .lv-done { color: #2e7d52; }
 .lv-masjid { color: #1c5cab; }
 .viewtoggle { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .viewtoggle button {
@@ -407,7 +428,10 @@ body { -webkit-tap-highlight-color: transparent; }
   /* 16px or iOS zooms the page when the picker opens */
   .routine-list { grid-template-columns: 1fr; gap: 8px; }
   .routine-list label { font-size: 15px; }
-  .routine-list .ctl { flex: 0 0 180px; }
+  .routine-list .ctl { flex: 0 0 168px; }
+  .routine-list label { padding: 6px; gap: 10px; }
+  .status { width: 21px; height: 21px; }
+  .status svg { width: 21px; height: 21px; }
   .routine-list select { font-size: 16px; padding: 8px; }
   .routine-list input[type='checkbox'] { width: 24px; height: 24px; margin-right: 10px; }
   .summary { padding: 10px 8px; font-size: 15px; }
@@ -427,3 +451,30 @@ body { -webkit-tap-highlight-color: transparent; }
 .tile dl.sub > div { display: flex; justify-content: space-between; gap: 12px; }
 .tile dl.sub dt { color: var(--muted); }
 .tile dl.sub dd { margin: 0; text-align: right; }
+
+/* ---- pull to refresh ------------------------------------------------------ */
+
+/* stop the browser's own overscroll fighting the gesture */
+html, body { overscroll-behavior-y: contain; }
+
+.ptr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--muted);
+  transition: height 0.18s ease-out;
+}
+.ptr svg { display: block; }
+.ptr svg.ready { color: var(--d4); }
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

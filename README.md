@@ -229,7 +229,11 @@ The twelve routines come in two kinds, listed in the order the day happens:
 | `done` | Mengaji pagi, Olahraga pagi, Mandi pagi, Mandi sore, Mengaji habis Maghrib, Makan, Minum vitamin | `done` |
 
 The control follows the kind: a prayer gets a dropdown because it has a scale to
-pick from, a habit gets a checkbox because it only has two states. The catalogue
+pick from, a habit gets a checkbox because it only has two states. Beside each row
+a status icon shows where it stands — dashed ring for nothing recorded, clock for
+late, filled check for on time or done, masjid for in the masjid. The icon only
+reports; the dropdown or checkbox is what sets it. Shape carries the meaning as
+much as colour, so a row still reads in greyscale. The catalogue
 is served from `/api/me`, so the client never carries its own copy.
 `masjid` is allowed **only for Singgih** — the roster says who may use which levels
 for which kind, and `PUT /api/routines` enforces it, so the browser cannot talk its
@@ -330,3 +334,15 @@ than animating faster.
 Three.js was considered and rejected — a 3D renderer to animate a list of
 dropdowns is the wrong tool. Tailwind was rejected too: the stylesheet already
 works, and converting it would be churn with nothing visible at the end.
+
+## Pull to refresh
+
+Pull down at the top of the page to reload. A home-screen PWA has no browser
+chrome and therefore no reload button, so without this the only way to see the
+other person's marks was to kill the app.
+
+`touchmove` is bound non-passively, because `preventDefault` is ignored on a
+passive listener and the page would scroll out from under the gesture. It only
+engages at `scrollY === 0` pulling downwards, applies resistance so it never feels
+loose, and needs 64px before it fires. `overscroll-behavior-y: contain` keeps the
+browser's own overscroll from competing.

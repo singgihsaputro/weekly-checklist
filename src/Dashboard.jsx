@@ -39,13 +39,13 @@ const barPath = (x, y, w, h, r = 4) => {
   return `M${x},${y} H${x + w - rr} A${rr},${rr} 0 0 1 ${x + w},${y + rr} V${y + h - rr} A${rr},${rr} 0 0 1 ${x + w - rr},${y + h} H${x} Z`
 }
 
-export default function Dashboard() {
+export default function Dashboard({ reloads }) {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     api('/api/stats').then(setStats).catch((e) => setError(e.message))
-  }, [])
+  }, [reloads])
 
   if (error) return <p className="error">{error}</p>
   if (!stats) return <p className="muted">Loading…</p>

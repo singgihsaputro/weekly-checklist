@@ -1,14 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { api, DAYS, LEVEL_INFO, GOOD, mondayOf, shiftWeek, dateOf, dayIndex, fmt, fmtLong, ymd } from './api.js'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
 import Logo from './Logo.jsx'
 import Ring from './Ring.jsx'
+import StatusIcon from './StatusIcon.jsx'
+import PullToRefresh from './PullToRefresh.jsx'
 
 export default function App() {
   const [me, setMe] = useState(undefined) // undefined = still checking, null = signed out
   const [hash, setHash] = useState(location.hash)
+  // bumping this is what a pull-to-refresh does; the pages watch it
+  const [reloads, setReloads] = useState(0)
+
+  const refresh = useCallback(async () => {
+    setReloads((n) => n + 1)
+    // let the refetch actually happen before the spinner stops
+    await new Promise((r) => setTimeout(r, 450))
+  }, [])
 
   useEffect(() => {
     api('/api/me')
@@ -34,6 +44,7 @@ export default function App() {
 
   return (
     <div className="page">
+      <PullToRefresh onRefresh={refresh} />
       <div className="cover" />
       <main>
         <div className="brand">
@@ -65,7 +76,7 @@ export default function App() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.22, ease: [0.2, 0.8, 0.3, 1] }}
           >
-            {onDashboard ? <Dashboard /> : <Routines me={me} />}
+            {onDashboard ? <Dashboard reloads={reloads} /> : <Routines me={me} reloads={reloads} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -73,7 +84,7 @@ export default function App() {
   )
 }
 
-function Routines({ me }) {
+function Routines({ me, reloads }) {
   const [view, setView] = useState(() => localStorage.getItem('view') || 'week')
   const [anchor, setAnchor] = useState(() => ymd(new Date()))
   const [tasks, setTasks] = useState([])
@@ -93,7 +104,7 @@ function Routines({ me }) {
   useEffect(() => {
     api(`/api/tasks?week=${week}`).then(setTasks)
     api(`/api/routines?week=${week}`).then(setMarks)
-  }, [week])
+  }, [week, reloads])
 
   const step = (n) => setAnchor(daily ? ymd(dateOf(anchor, n)) : shiftWeek(week, n))
 
@@ -262,13 +273,20 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
 
           if (compact)
             return (
-              <button className="summary" key={email} onClick={() => onOpenDay(date)}>
+              <motion.button
+                className="summary"
+                key={email}
+                onClick={() => onOpenDay(date)}
+                whileTap={{ scale: 0.97 }}
+                transition={spring}
+                aria-label={`${who}: ${kept} of ${total} routines kept on ${iso} — open this day`}
+              >
                 <Ring value={kept} max={total} size={34} />
                 <span className={mine ? 'me' : ''}>{who}</span>
                 <span className="muted">
                   {kept}/{total}
                 </span>
-              </button>
+              </motion.button>
             )
 
           return (
@@ -286,7 +304,8 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
                   const label = `${who} · ${r.label} on ${iso}`
                   return (
                     <label key={r.key} className={r.kind === 'done' ? 'plain' : ''}>
-                      <span>{r.label}</span>
+                      <StatusIcon level={level} title={LEVEL_INFO[level].label} />
+                      <span className="name">{r.label}</span>
                       <span className="ctl">
                         {/* a scale needs a scale; done-or-not only needs a box */}
                         {r.kind === 'done' ? (
