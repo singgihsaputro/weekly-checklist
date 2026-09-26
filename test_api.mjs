@@ -144,10 +144,10 @@ try {
   assert.deepEqual(rosterOf(TITIS).levels.done, ['done'], 'the plain routines are the same for both')
   assert.deepEqual(rosterOf(TITIS).levels.haid, ['haid'], 'haid is hers')
   assert.deepEqual(rosterOf(SINGGIH).levels.haid, [], 'and does not apply to him at all')
-  assert.equal(me.routines.length, 13, 'five prayers, seven other routines, and the haid flag')
+  assert.equal(me.routines.length, 13, 'twelve routines plus the haid flag')
   assert.equal(me.routines.filter((r) => r.kind === 'sholat').length, 5)
   assert.ok(
-    me.routines.some((r) => r.key === 'minum_vitamin' && r.kind === 'done'),
+    me.routines.some((r) => r.key === 'tidur_sebelum_10' && r.kind === 'done'),
     'the catalogue carries the non-sholat routines'
   )
 
@@ -194,7 +194,7 @@ try {
   await put({ date: iso(), item: 'sholat_isya', level: 'ontime' })
   await put({ date: iso(), item: 'sholat_maghrib', level: 'masjid' })
   await put({ date: iso(), item: 'olahraga_pagi', level: 'done' })
-  await put({ date: iso(), item: 'minum_vitamin', level: 'done' })
+  await put({ date: iso(), item: 'tidur_sebelum_10', level: 'done' })
   let marks = await json(`/api/routines?week=${week}`)
   assert.equal(marks.length, 5, 'five marks stored')
   assert.ok(marks.every((m) => m.email === SINGGIH), 'marks belong to the signed-in user')
@@ -221,7 +221,7 @@ try {
   assert.equal(mine.byRoutine.length, 7, 'the seven other routines are reported')
   assert.equal(mine.byRoutine.find((r) => r.item === 'olahraga_pagi').done, 1)
   assert.equal(mine.byRoutine.find((r) => r.item === 'mandi_pagi').done, 0)
-  assert.equal(mine.byRoutine.find((r) => r.item === 'minum_vitamin').possible, 30)
+  assert.equal(mine.byRoutine.find((r) => r.item === 'tidur_sebelum_10').possible, 30)
   assert.equal(mine.weekly.length, 8, 'eight weeks of trend')
   assert.equal(mine.streak, 0, 'two prayers today is not a complete day')
   assert.ok(mine.weekly[7].possible <= 35, 'the current week counts only the days so far')
@@ -259,7 +259,7 @@ try {
     assert.equal(r.status, 200, 'the scheduler gets in')
     const report = await r.json()
     assert.match(report.subject, /^SingFams Daily Routines - /)
-    assert.ok(report.html.includes('Sholat Subuh') || report.html.includes('Subuh'), 'pills carry full prayer names')
+    assert.ok(report.html.includes('Shubuh') && report.html.includes('Maghrib'), 'pills carry full prayer names')
     assert.equal(report.people.length, 2, 'both people are in the report')
 
     const him = report.people.find((p) => p.email === SINGGIH)
@@ -269,7 +269,7 @@ try {
     assert.equal(him.onTime, 2, 'ontime and masjid both count as on time')
     assert.equal(him.masjid, 1)
     assert.equal(him.missed.length, 8, 'and names what was missed')
-    assert.ok(him.missed.includes('Mandi pagi'))
+    assert.ok(him.missed.includes('Mandi Pagi'))
     assert.match(report.text, /Singgih — 4\/12 routines/)
     assert.match(report.text, /in the masjid/)
     assert.ok(!report.html.includes('<script'), 'the html is escaped')
@@ -308,7 +308,7 @@ try {
       'per-prayer denominators drop as well'
     )
     // the habits still count — only the prayers are excused
-    assert.equal(after.byRoutine.find((r) => r.item === 'makan').possible, 30)
+    assert.equal(after.byRoutine.find((r) => r.item === 'puasa_sunnah').possible, 30)
 
     const him = (await json('/api/stats')).byUser[SINGGIH]
     assert.equal(him.last30.possible, 150, 'his days are untouched by her flag')

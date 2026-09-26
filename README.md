@@ -225,9 +225,18 @@ The twelve routines come in two kinds, listed in the order the day happens:
 
 | kind | items | levels |
 |---|---|---|
-| `sholat` | Subuh, Dzuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
-| `done` | Mengaji pagi, Olahraga pagi, Mandi pagi, Mandi sore, Mengaji habis Maghrib, Makan, Minum vitamin | `done` |
+| `sholat` | Shubuh, Dhuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
+| `done` | Puasa Sunnah, Mandi Pagi, Sholat Tahajud, Mengaji Pagi, Olahraga Pagi, Mengaji Petang, Tidur Sebelum Jam 10 | `done` |
 | `haid` | Dalam haid | `haid` |
+
+`ROUTINES` is listed in the order the day happens, and that order is what the UI
+renders — moving a line moves it on screen. Keys never change when a label does,
+so renaming something keeps its history.
+
+**Sholat Tahajud is `done`, not `sholat`.** It is sunnah and not prayed in
+congregation, so the on-time/in-the-masjid scale does not apply, and folding it
+into the five would distort the wajib statistics — the streak, the on-time rate
+and the per-prayer chart all count five prayers a day.
 
 ### Haid
 

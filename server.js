@@ -43,18 +43,18 @@ const levelsFor = (email, kind) => {
 const ROUTINES = [
   // governs the whole day, so it sits above everything it affects
   { key: 'haid', label: 'Dalam haid', kind: 'haid' },
-  { key: 'sholat_subuh', label: 'Sholat Subuh', kind: 'sholat' },
-  { key: 'mengaji_subuh', label: 'Mengaji pagi', kind: 'done' },
-  { key: 'olahraga_pagi', label: 'Olahraga pagi', kind: 'done' },
-  { key: 'mandi_pagi', label: 'Mandi pagi', kind: 'done' },
-  { key: 'sholat_dzuhur', label: 'Sholat Dzuhur', kind: 'sholat' },
+  { key: 'puasa_sunnah', label: 'Puasa Sunnah', kind: 'done' },
+  { key: 'mandi_pagi', label: 'Mandi Pagi', kind: 'done' },
+  { key: 'sholat_tahajud', label: 'Sholat Tahajud', kind: 'done' },
+  { key: 'sholat_subuh', label: 'Sholat Shubuh', kind: 'sholat' },
+  { key: 'mengaji_subuh', label: 'Mengaji Pagi', kind: 'done' },
+  { key: 'olahraga_pagi', label: 'Olahraga Pagi', kind: 'done' },
+  { key: 'sholat_dzuhur', label: 'Sholat Dhuhur', kind: 'sholat' },
   { key: 'sholat_ashar', label: 'Sholat Ashar', kind: 'sholat' },
-  { key: 'mandi_sore', label: 'Mandi sore', kind: 'done' },
   { key: 'sholat_maghrib', label: 'Sholat Maghrib', kind: 'sholat' },
-  { key: 'mengaji_maghrib', label: 'Mengaji habis Maghrib', kind: 'done' },
-  { key: 'sholat_isya', label: 'Sholat Isya', kind: 'done_placeholder' },
-  { key: 'makan', label: 'Makan', kind: 'done' },
-  { key: 'minum_vitamin', label: 'Minum vitamin', kind: 'done' },
+  { key: 'mengaji_maghrib', label: 'Mengaji Petang', kind: 'done' },
+  { key: 'sholat_isya', label: 'Sholat Isya', kind: 'sholat' },
+  { key: 'tidur_sebelum_10', label: 'Tidur Sebelum Jam 10', kind: 'done' },
 ]
 ROUTINES.find((r) => r.key === 'sholat_isya').kind = 'sholat'
 
