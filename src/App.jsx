@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react'
-import { api, DAYS, PRAYERS, mondayOf, shiftWeek, dateOf, fmt, ymd } from './api.js'
+import {
+  api,
+  DAYS,
+  PRAYERS,
+  LEVEL_INFO,
+  nextLevel,
+  mondayOf,
+  shiftWeek,
+  dateOf,
+  dayIndex,
+  fmt,
+  fmtLong,
+  ymd,
+} from './api.js'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
+import Logo from './Logo.jsx'
 
 export default function App() {
   const [me, setMe] = useState(undefined) // undefined = still checking, null = signed out
@@ -33,12 +47,17 @@ export default function App() {
     <div className="page">
       <div className="cover" />
       <main>
-        <div className="icon">{onDashboard ? '📊' : '✅'}</div>
-        <h1>{onDashboard ? 'Sholat analytics' : 'Weekly Checklist'}</h1>
+        <div className="brand">
+          <Logo />
+          <div>
+            <h1>Daily Routines</h1>
+            <p className="tagline">{onDashboard ? 'Sholat analytics' : 'Tasks and sholat, week by week'}</p>
+          </div>
+        </div>
 
         <nav className="nav">
           <a href="#/" className={onDashboard ? '' : 'on'}>
-            Checklist
+            Routines
           </a>
           <a href="#/dashboard" className={onDashboard ? 'on' : ''}>
             Analytics
@@ -49,23 +68,34 @@ export default function App() {
           </span>
         </nav>
 
-        {onDashboard ? <Dashboard /> : <Checklist me={me} />}
+        {onDashboard ? <Dashboard /> : <Routines me={me} />}
       </main>
     </div>
   )
 }
 
-function Checklist({ me }) {
-  const [week, setWeek] = useState(mondayOf(new Date()))
+function Routines({ me }) {
+  const [view, setView] = useState(() => localStorage.getItem('view') || 'week')
+  const [anchor, setAnchor] = useState(() => ymd(new Date()))
   const [tasks, setTasks] = useState([])
   const [marks, setMarks] = useState([])
-  const todayWeek = mondayOf(new Date())
-  const today = todayWeek === week ? (new Date().getDay() + 6) % 7 : -1
 
+  const week = mondayOf(anchor)
+  const today = ymd(new Date())
+  const daily = view === 'day'
+
+  useEffect(() => {
+    localStorage.setItem('view', view)
+  }, [view])
+
+  // the day view still loads its whole week — one request either way, and
+  // stepping between days then costs nothing
   useEffect(() => {
     api(`/api/tasks?week=${week}`).then(setTasks)
     api(`/api/sholat?week=${week}`).then(setMarks)
   }, [week])
+
+  const step = (n) => setAnchor(daily ? ymd(dateOf(anchor, n)) : shiftWeek(week, n))
 
   const add = async (day, text) => {
     const task = await api('/api/tasks', { method: 'POST', body: JSON.stringify({ week, day, text }) })
@@ -82,60 +112,73 @@ function Checklist({ me }) {
     await api(`/api/tasks/${task.id}`, { method: 'DELETE' })
   }
 
-  const markSholat = async (date, prayer, ontime) => {
-    setMarks((m) =>
-      ontime
-        ? [...m, { email: me.email, date, prayer }]
-        : m.filter((x) => !(x.email === me.email && x.date === date && x.prayer === prayer))
-    )
+  const setLevel = async (date, prayer, level) => {
+    setMarks((m) => {
+      const rest = m.filter((x) => !(x.email === me.email && x.date === date && x.prayer === prayer))
+      return level ? [...rest, { email: me.email, date, prayer, level }] : rest
+    })
     try {
-      await api('/api/sholat', { method: 'PUT', body: JSON.stringify({ date, prayer, ontime }) })
+      await api('/api/sholat', { method: 'PUT', body: JSON.stringify({ date, prayer, level }) })
     } catch {
       api(`/api/sholat?week=${week}`).then(setMarks) // put it back the way the server sees it
     }
   }
 
-  const done = tasks.filter((t) => t.done).length
+  const shown = daily ? [dayIndex(week, anchor)] : [0, 1, 2, 3, 4, 5, 6]
+  const visible = tasks.filter((t) => shown.includes(t.day))
+  const done = visible.filter((t) => t.done).length
 
   return (
     <>
-      <p className="intro">
-        Here, you will be adding your day-to-day tasks and as you accomplish them, you will check them off the list -
-      </p>
-
       <div className="weekbar">
-        <button onClick={() => setWeek(shiftWeek(week, -1))} aria-label="Previous week">
+        <div className="viewtoggle" role="group" aria-label="View">
+          <button className={daily ? '' : 'on'} onClick={() => setView('week')}>
+            Week
+          </button>
+          <button className={daily ? 'on' : ''} onClick={() => setView('day')}>
+            Day
+          </button>
+        </div>
+        <button onClick={() => step(-1)} aria-label={daily ? 'Previous day' : 'Previous week'}>
           ‹
         </button>
         <span className="range">
-          {fmt(dateOf(week, 0))} – {fmt(dateOf(week, 6))}
+          {daily ? fmtLong(dateOf(week, shown[0])) : `${fmt(dateOf(week, 0))} – ${fmt(dateOf(week, 6))}`}
         </span>
-        <button onClick={() => setWeek(shiftWeek(week, 1))} aria-label="Next week">
+        <button onClick={() => step(1)} aria-label={daily ? 'Next day' : 'Next week'}>
           ›
         </button>
-        <button className="today" onClick={() => setWeek(mondayOf(new Date()))}>
+        <button className="today" onClick={() => setAnchor(today)}>
           Today
         </button>
         <span className="count">
-          {done}/{tasks.length} done
+          {done}/{visible.length} done
         </span>
       </div>
 
-      <div className="grid">
-        {DAYS.map((name, day) => (
+      <div className="scale">
+        {Object.entries(LEVEL_INFO).map(([key, info]) => (
+          <span key={key || 'none'}>
+            <b className={`lv-${key || 'none'}`}>{info.mark}</b> {info.label}
+          </span>
+        ))}
+      </div>
+
+      <div className={daily ? 'grid one' : 'grid'}>
+        {shown.map((day) => (
           <Day
             key={day}
             me={me}
-            name={name}
+            name={DAYS[day]}
             day={day}
             date={dateOf(week, day)}
-            isToday={day === today}
+            isToday={ymd(dateOf(week, day)) === today}
             tasks={tasks.filter((t) => t.day === day)}
             marks={marks}
             onAdd={add}
             onToggle={toggle}
             onRemove={remove}
-            onMark={markSholat}
+            onLevel={setLevel}
           />
         ))}
       </div>
@@ -143,7 +186,7 @@ function Checklist({ me }) {
   )
 }
 
-function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRemove, onMark }) {
+function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRemove, onLevel }) {
   const [text, setText] = useState('')
   const iso = ymd(date)
   const future = iso > ymd(new Date())
@@ -185,29 +228,33 @@ function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRe
 
       <div className="sholat">
         <div className="sholat-head">
-          <span>Sholat on time</span>
+          <span>Sholat</span>
           {PRAYERS.map((p) => (
             <abbr key={p.key} title={p.label}>
               {p.short}
             </abbr>
           ))}
         </div>
-        {people.map(({ email, name: who }) => {
+        {people.map(({ email, name: who, levels }) => {
           const mine = email === me.email
           return (
             <div className="sholat-row" key={email}>
               <span className={mine ? 'me' : ''}>{who}</span>
               {PRAYERS.map((p) => {
-                const on = marks.some((m) => m.email === email && m.date === iso && m.prayer === p.key)
+                const level = marks.find((m) => m.email === email && m.date === iso && m.prayer === p.key)?.level || ''
+                const info = LEVEL_INFO[level]
+                const description = `${who} · ${p.label} on ${iso}: ${info.label}`
                 return (
-                  <input
+                  <button
                     key={p.key}
-                    type="checkbox"
-                    checked={on}
+                    className={`lv lv-${level || 'none'}`}
                     disabled={!mine || future}
-                    onChange={() => onMark(iso, p.key, !on)}
-                    aria-label={`${who} ${p.label} on ${iso}${mine ? '' : ' (read only)'}`}
-                  />
+                    onClick={() => onLevel(iso, p.key, nextLevel(level, levels))}
+                    title={mine ? `${description} — tap to change` : description}
+                    aria-label={description}
+                  >
+                    {info.mark}
+                  </button>
                 )
               })}
             </div>

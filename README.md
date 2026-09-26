@@ -1,11 +1,16 @@
-# Weekly Checklist
+# Daily Routines
 
 React + Express + SQLite (via libSQL). Runs off a local file on your machine,
 off a hosted [Turso](https://turso.tech) database when `TURSO_DATABASE_URL` is set.
 
-A shared weekly task list, a per-person record of which prayers were on time, and
-one analytics page comparing the two. Sign in with Google; two allowlisted
-accounts, no sign-up.
+A shared task list, a per-person record of how each prayer went, and one analytics
+page comparing the two. Readable by week or one day at a time. Sign in with
+Google; two allowlisted accounts, no sign-up.
+
+Installable: it ships a web manifest and iOS home-screen icons, so *Add to Home
+Screen* gives it an app icon and a standalone window. There is deliberately **no
+service worker** — the data lives in Turso, so offline would show an empty app,
+and the cache invalidation would be real work for nothing.
 
 ## Local
 
@@ -202,17 +207,28 @@ SQLite, reached through `@libsql/client` — a local file in dev, Turso in produ
 | `text` | task text (max 500 chars) |
 | `done` | 0/1 |
 
-`sholat` — per account. **A row means that prayer was on time; no row means it
-wasn't.** Unchecked is the absence of data, so nothing has to be written to start
-a day, and unchecking deletes rather than updates.
+`sholat` — per account. **A row records how the prayer went; no row means nothing
+was recorded.** The fourth state is the absence of data, so a fresh day costs no
+writes, and clearing a mark deletes rather than updates.
 
 | column | meaning |
 |---|---|
 | `email` | whose mark it is; you can only write your own |
 | `date` | `YYYY-MM-DD` in `APP_TZ` |
 | `prayer` | `subuh` / `dzuhur` / `ashar` / `maghrib` / `isya` |
+| `level` | `sholat` < `ontime` < `masjid` |
 
-Primary key is all three, so marking twice is a no-op rather than a duplicate.
+Primary key is `(email, date, prayer)`, so changing a level replaces the row
+instead of adding one.
+
+`masjid` is allowed **only for Singgih** — the roster in `server.js` says who may
+use which levels, and `PUT /api/sholat` enforces it, so the browser cannot talk
+its way past it. Both `ontime` and `masjid` count as on time in the stats;
+`masjid` is also counted on its own.
+
+Rows written before levels existed are migrated to `ontime`, which is what they
+meant. The `ALTER TABLE` runs on every boot and is allowed to fail once the
+column is there.
 
 Swap to Postgres only if you outgrow it — 4 queries in `server.js` change, nothing else.
 
@@ -241,5 +257,35 @@ out clears it; rotating `SESSION_SECRET` invalidates every session at once.
 ## Not included
 
 No sign-up, no refresh tokens (the session outlives them and nothing calls Google
-again), no drag-reorder, no recurring tasks. Tasks are shared between both accounts by design; only sholat marks are
+again), no service worker, no drag-reorder, no recurring tasks. Tasks are shared between both accounts by design; only sholat marks are
 per-person.
+
+## On a phone
+
+The layout is built for a phone first: one column, tap targets sized for thumbs,
+16px inputs so iOS does not zoom on focus, and the reveal-on-hover controls stay
+visible where there is no hover. The charts keep a fixed `viewBox`, so their
+gutters and type sizes are re-proportioned below 560px rather than scaled down
+into illegibility.
+
+### Add to Home Screen
+
+On iPhone: open it in **Safari** → Share → *Add to Home Screen*. You get the app
+icon, the name "Routines", and a standalone window with no browser chrome.
+`display-mode: standalone` trims the cover and adds bottom safe-area padding.
+
+The icons come from one source, `public/favicon.svg`, rasterised with
+`rsvg-convert`:
+
+```bash
+rsvg-convert -w 180 -h 180 public/favicon.svg -o public/apple-touch-icon.png
+```
+
+`apple-touch-icon.png` is full-bleed and opaque, because iOS rounds and masks it
+itself and renders transparency as black. The maskable manifest icon shrinks the
+mark to 70% so it survives Android's circular crop.
+
+One caveat worth knowing: signing in from a standalone iOS window sends you out
+to Google and back, and older iOS versions hand that round trip to Safari
+instead, leaving the session in the wrong place. If sign-in ever seems to "not
+stick" in the installed app, sign in once from inside it rather than from Safari.

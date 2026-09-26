@@ -137,6 +137,9 @@ try {
   assert.equal(me.email, SINGGIH)
   assert.equal(me.name, 'Singgih')
   assert.equal(me.users.length, 2, 'roster carries both people')
+  const rosterOf = (email) => me.users.find((u) => u.email === email)
+  assert.deepEqual(rosterOf(SINGGIH).levels, ['sholat', 'ontime', 'masjid'], 'masjid is his to use')
+  assert.deepEqual(rosterOf(TITIS).levels, ['sholat', 'ontime'], 'and not hers')
 
   const forged = cookie
   cookie = 'session=eyJlbWFpbCI6InNpbmdnaWgucm9jaG1hZEBnbWFpbC5jb20ifQ.deadbeef'
@@ -163,41 +166,57 @@ try {
   assert.equal((await json(`/api/tasks?week=${week}`)).length, 0)
 
   // ---- sholat -------------------------------------------------------------
-  assert.deepEqual(await json(`/api/sholat?week=${week}`), [], 'every prayer starts unchecked')
+  assert.deepEqual(await json(`/api/sholat?week=${week}`), [], 'nothing is recorded to start with')
   const put = (body) => call('/api/sholat', { method: 'PUT', body: JSON.stringify(body) })
-  assert.equal((await put({ date: iso(), prayer: 'nope', ontime: true })).status, 400, 'rejects an unknown prayer')
-  assert.equal((await put({ date: iso(3), prayer: 'subuh', ontime: true })).status, 400, 'rejects a future day')
+  assert.equal((await put({ date: iso(), prayer: 'nope', level: 'ontime' })).status, 400, 'rejects an unknown prayer')
+  assert.equal((await put({ date: iso(3), prayer: 'subuh', level: 'ontime' })).status, 400, 'rejects a future day')
+  assert.equal((await put({ date: iso(), prayer: 'subuh', level: 'invented' })).status, 400, 'rejects an unknown level')
 
-  await put({ date: iso(), prayer: 'subuh', ontime: true })
-  await put({ date: iso(), prayer: 'isya', ontime: true })
-  await put({ date: iso(), prayer: 'subuh', ontime: true }) // twice must not double-count
+  await put({ date: iso(), prayer: 'subuh', level: 'sholat' })
+  await put({ date: iso(), prayer: 'isya', level: 'ontime' })
+  await put({ date: iso(), prayer: 'maghrib', level: 'masjid' })
   let marks = await json(`/api/sholat?week=${week}`)
-  assert.equal(marks.length, 2, 'two marks, no duplicate')
+  assert.equal(marks.length, 3, 'three marks stored')
   assert.ok(marks.every((m) => m.email === SINGGIH), 'marks belong to the signed-in user')
+  assert.equal(marks.find((m) => m.prayer === 'maghrib').level, 'masjid', 'level is stored, not just presence')
 
-  await put({ date: iso(), prayer: 'isya', ontime: false })
-  assert.equal((await json(`/api/sholat?week=${week}`)).length, 1, 'unchecking removes the mark')
+  // changing a level replaces it rather than adding a second row
+  await put({ date: iso(), prayer: 'subuh', level: 'ontime' })
+  marks = await json(`/api/sholat?week=${week}`)
+  assert.equal(marks.length, 3, 'still three rows')
+  assert.equal(marks.find((m) => m.prayer === 'subuh').level, 'ontime', 'the level moved up')
+
+  await put({ date: iso(), prayer: 'isya', level: null })
+  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, 'clearing removes the row')
 
   // ---- stats --------------------------------------------------------------
   const stats = await json('/api/stats')
   assert.deepEqual(Object.keys(stats.byUser).sort(), [SINGGIH, TITIS].sort(), 'both users appear')
   const mine = stats.byUser[SINGGIH]
-  assert.equal(mine.last30.ontime, 1)
+  assert.equal(mine.last30.ontime, 2, 'ontime and masjid both count as on time')
+  assert.equal(mine.last30.masjid, 1, 'masjid counted separately too')
+  assert.equal(mine.last30.prayed, 2, 'prayed counts every level')
   assert.equal(mine.last30.possible, 150, '30 days x 5 prayers')
   assert.equal(mine.byPrayer.find((p) => p.prayer === 'subuh').ontime, 1)
   assert.equal(mine.weekly.length, 8, 'eight weeks of trend')
-  assert.equal(mine.streak, 0, 'one prayer today is not a complete day')
+  assert.equal(mine.streak, 0, 'two prayers today is not a complete day')
   assert.ok(mine.weekly[7].possible <= 35, 'the current week counts only the days so far')
 
   // ---- the second account is isolated ------------------------------------
   cookie = (await signIn({ claims: { email: TITIS } })).session
   assert.ok(cookie, 'the other invited account is let in too')
   assert.equal((await json('/api/me')).name, 'Titis')
-  assert.equal((await json(`/api/sholat?week=${week}`)).length, 1, "sees the other person's mark")
-  await put({ date: iso(), prayer: 'ashar', ontime: true })
+  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, "sees the other person's marks")
+
+  // the masjid level is his, not hers — the server decides, not the client
+  assert.equal((await put({ date: iso(), prayer: 'ashar', level: 'masjid' })).status, 400, 'masjid is refused for her')
+  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, 'and nothing was written')
+
+  await put({ date: iso(), prayer: 'ashar', level: 'ontime' })
   const after = await json('/api/stats')
   assert.equal(after.byUser[TITIS].last30.ontime, 1, 'writes land on the signed-in user')
-  assert.equal(after.byUser[SINGGIH].last30.ontime, 1, "and not on the other's")
+  assert.equal(after.byUser[TITIS].last30.masjid, 0, 'she has no masjid prayers')
+  assert.equal(after.byUser[SINGGIH].last30.ontime, 2, "and not on the other's")
 
   // ---- logout -------------------------------------------------------------
   assert.equal((await call('/api/logout', { method: 'POST' })).status, 204)

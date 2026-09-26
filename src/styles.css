@@ -34,8 +34,23 @@ main {
   padding: 0 24px 80px;
 }
 
-.icon { font-size: 56px; margin-top: -34px; }
-h1 { font-size: 40px; margin: 8px 0 0; }
+.brand { display: flex; align-items: center; gap: 16px; margin-top: -28px; }
+h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
+.tagline { color: var(--muted); font-size: 14px; margin: 2px 0 0; }
+
+.logo { display: block; flex: none; filter: drop-shadow(0 4px 12px rgb(34 90 68 / 0.28)); }
+.brand .logo { transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.brand:hover .logo { transform: scale(1.05) rotate(-3deg); }
+
+/* ring circumference at r=150 is 942; the visible 270 degrees is 707 */
+.logo .ring { stroke-dasharray: 707; stroke-dashoffset: 707; animation: logo-draw 0.9s 0.1s ease-out forwards; }
+.logo .tick { stroke-dasharray: 175; stroke-dashoffset: 175; animation: logo-draw 0.45s 0.65s ease-out forwards; }
+.logo.still .ring, .logo.still .tick { stroke-dashoffset: 0; animation: none; }
+@keyframes logo-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .logo .ring, .logo .tick { animation: none; stroke-dashoffset: 0; }
+  .brand:hover .logo { transform: none; }
+}
 .intro { color: var(--muted); max-width: 640px; }
 
 .weekbar {
@@ -94,7 +109,6 @@ h1 { font-size: 40px; margin: 8px 0 0; }
 .card input[type='checkbox'] { accent-color: currentColor; width: 15px; height: 15px; cursor: pointer; }
 
 .del {
-  visibility: hidden;
   background: none;
   border: 0;
   color: var(--muted);
@@ -102,7 +116,10 @@ h1 { font-size: 40px; margin: 8px 0 0; }
   line-height: 1;
   cursor: pointer;
 }
-.card li:hover .del { visibility: visible; }
+@media (hover: hover) {
+  .del { visibility: hidden; }
+  .card li:hover .del { visibility: visible; }
+}
 
 .card .add {
   width: 100%;
@@ -110,7 +127,7 @@ h1 { font-size: 40px; margin: 8px 0 0; }
   background: none;
   border: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   padding: 3px 0;
   outline: none;
 }
@@ -145,8 +162,8 @@ h1 { font-size: 40px; margin: 8px 0 0; }
   border-radius: 12px;
   padding: 32px 28px;
 }
-.login .icon { font-size: 40px; margin: 0; }
-.login h1 { font-size: 26px; margin: 6px 0 0; }
+.login .logo { margin: 0 auto; }
+.login h1 { font-size: 26px; margin: 12px 0 0; }
 .login .intro { margin: 4px auto 22px; font-size: 14px; }
 
 /* Google's own button spec: white surface, 1px grey border, mark on the left */
@@ -212,8 +229,49 @@ h1 { font-size: 40px; margin: 8px 0 0; }
 .sholat-head abbr { text-align: center; text-decoration: none; cursor: help; }
 .sholat-row { font-size: 13px; color: var(--muted); padding: 1px 0; }
 .sholat-row .me { color: var(--text); font-weight: 600; }
-.sholat-row input[type='checkbox'] { justify-self: center; margin: 0; }
-.sholat-row input:disabled { cursor: default; opacity: 0.55; }
+/* one tap cycles: nothing → sholat → on time → (masjid) → nothing */
+.lv {
+  justify-self: stretch;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lv:disabled { cursor: default; }
+.lv:not(:disabled):hover { background: var(--hover); }
+.lv-none { color: #c9c8c4; }
+.lv-sholat { color: #8a8984; }
+.lv-ontime { color: #2e7d52; }
+.lv-masjid { color: #1c5cab; }
+
+/* the scale, spelled out once instead of in every card */
+.scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: -4px 0 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.scale b { font-size: 14px; }
+
+.viewtoggle { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.viewtoggle button {
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
+  padding: 5px 12px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.viewtoggle button.on { background: var(--text); color: #fff; }
+
+.grid.one { grid-template-columns: minmax(0, 560px); }
 
 /* ---- dashboard ------------------------------------------------------------ */
 
@@ -274,3 +332,65 @@ h1 { font-size: 40px; margin: 8px 0 0; }
 .tableview table { border-collapse: collapse; margin-top: 12px; min-width: 380px; }
 .tableview th, .tableview td { text-align: left; padding: 7px 18px 7px 0; border-bottom: 1px solid var(--line); }
 .tableview thead th { color: var(--muted); font-weight: 600; }
+
+
+/* ---- touch & small screens ------------------------------------------------ */
+
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+
+/* launched from the home screen there is no browser chrome to scroll past */
+@media (display-mode: standalone) {
+  .cover { height: 96px; }
+  main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 560px) {
+  main { padding: 0 16px calc(56px + env(safe-area-inset-bottom)); }
+  .cover { height: 120px; }
+  .brand { gap: 12px; margin-top: -22px; }
+  .brand .logo { width: 46px; height: 46px; }
+  h1 { font-size: 26px; }
+  .tagline { font-size: 13px; }
+  .intro { font-size: 14px; }
+
+  /* the toggle takes its own row so the date never has to wrap */
+  .weekbar { flex-wrap: wrap; gap: 8px; margin: 20px 0 14px; }
+  .weekbar button { padding: 8px 14px; font-size: 16px; }
+  .viewtoggle { flex: 1 0 100%; }
+  .viewtoggle button { flex: 1; }
+  .range { min-width: 0; flex: 1; font-size: 15px; white-space: nowrap; }
+  .count { margin-left: 0; }
+
+  .nav { gap: 14px; }
+  .nav .who { font-size: 13px; }
+
+  .grid { gap: 12px; }
+  .card { padding: 14px; }
+  .card h2 { font-size: 18px; }
+  .card li { padding: 7px 0; }
+  .card input[type='checkbox'] { width: 20px; height: 20px; }
+  .del { font-size: 22px; padding: 0 4px; }
+
+  /* five columns wide enough to hit without zooming in */
+  .sholat-head, .sholat-row { grid-template-columns: 1fr repeat(5, 38px); }
+  .sholat-head { font-size: 12px; }
+  .sholat-row { font-size: 14px; min-height: 36px; }
+  .lv { height: 36px; font-size: 19px; }
+  .scale { font-size: 12px; gap: 3px 14px; }
+  .viewtoggle button { padding: 8px 16px; font-size: 15px; }
+
+  /* SVG text is in viewBox units, so it shrinks with the chart — size it back up */
+  .chart .axis { font-size: 17px; }
+  .chart .cat { font-size: 19px; }
+  .chart .value { font-size: 18px; }
+  .chart h2 { font-size: 17px; }
+  .tile .hero { font-size: 40px; }
+  .tableview table { min-width: 0; width: 100%; }
+  .tooltip { font-size: 13px; }
+}
+
+.tile dl.sub { display: grid; gap: 6px; margin: 14px 0 0; }
+.tile dl.sub > div { display: flex; justify-content: space-between; gap: 12px; }
+.tile dl.sub dt { color: var(--muted); }
+.tile dl.sub dd { margin: 0; text-align: right; }

@@ -45,4 +45,25 @@ export const dateOf = (week, day) => {
 
 export const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
-export const pct = (ontime, possible) => (possible ? Math.round((ontime / possible) * 100) : 0)
+export const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0)
+
+// Worst to best; the empty key is "nothing recorded", which is no row at all.
+// Glyphs differ in shape as well as colour, so the scale survives a greyscale
+// screen or a colourblind reader.
+export const LEVEL_INFO = {
+  '': { label: 'nothing recorded', mark: '–' },
+  sholat: { label: 'sholat, not on time', mark: '○' },
+  ontime: { label: 'on time', mark: '●' },
+  masjid: { label: 'on time in masjid', mark: '◉' },
+}
+
+export const nextLevel = (level, allowed) => {
+  const order = ['', ...allowed]
+  return order[(order.indexOf(level || '') + 1) % order.length]
+}
+
+export const dayIndex = (week, date) =>
+  Math.round((new Date(`${date}T12:00:00`) - new Date(`${week}T12:00:00`)) / 86400000)
+
+export const fmtLong = (d) =>
+  d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })

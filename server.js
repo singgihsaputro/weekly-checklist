@@ -17,13 +17,20 @@ const db = createClient(
 // The whole app is these two people. Google vouches for who someone is; this
 // list decides who is let in. Any other Google account is bounced at the callback.
 const USERS = {
-  'singgih.rochmad@gmail.com': { name: 'Singgih' },
+  'singgih.rochmad@gmail.com': { name: 'Singgih', masjid: true },
   'titis.ekaaprilia@gmail.com': { name: 'Titis' },
 }
 
+// Worst to best. No row at all is the fourth state: nothing recorded.
+const LEVELS = ['sholat', 'ontime', 'masjid']
+const ON_TIME = new Set(['ontime', 'masjid'])
+// praying in the masjid is a thing only one of them does
+const levelsFor = (email) => (USERS[email]?.masjid ? LEVELS : LEVELS.filter((l) => l !== 'masjid'))
+
 const PRAYERS = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
 
-const roster = () => Object.entries(USERS).map(([email, u]) => ({ email, name: u.name }))
+const roster = () =>
+  Object.entries(USERS).map(([email, u]) => ({ email, name: u.name, levels: levelsFor(email) }))
 
 // Everyone here is in one timezone; days must not roll over on UTC's schedule.
 const TZ = process.env.APP_TZ || 'Asia/Jakarta'
@@ -76,9 +83,9 @@ const readCookie = (req, name) => {
 
 // ---- google sign-in --------------------------------------------------------
 
-const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth'
-// overridable so the tests can point the exchange at a local stub; nothing sets
-// it in production, where it stays Google's endpoint
+// Both endpoints are overridable so the whole flow can be driven against a local
+// stub. Nothing sets either in production, where they stay Google's.
+const GOOGLE_AUTH = process.env.OAUTH_AUTH_ENDPOINT || 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN = process.env.OAUTH_TOKEN_ENDPOINT || 'https://oauth2.googleapis.com/token'
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -127,15 +134,20 @@ const init = () =>
         done INTEGER NOT NULL DEFAULT 0
       )`
     ),
-    // a row means "prayed on time"; no row means not. Unchecked is the default.
-    db.execute(
-      `CREATE TABLE IF NOT EXISTS sholat (
+    // a row records how the prayer went; no row means nothing was recorded
+    db
+      .execute(
+        `CREATE TABLE IF NOT EXISTS sholat (
         email TEXT NOT NULL,
         date TEXT NOT NULL,           -- YYYY-MM-DD, local (Asia/Jakarta)
         prayer TEXT NOT NULL,         -- subuh|dzuhur|ashar|maghrib|isya
+        level TEXT NOT NULL DEFAULT 'ontime',  -- sholat|ontime|masjid
         PRIMARY KEY (email, date, prayer)
       )`
-    ),
+      )
+      // rows written before levels existed all meant "on time", which is the
+      // default above; the ALTER throws once the column is there, which is fine
+      .then(() => db.execute('ALTER TABLE sholat ADD COLUMN level TEXT NOT NULL DEFAULT \'ontime\'').catch(() => {})),
   ]).catch((e) => {
     ready = null
     throw e
@@ -301,25 +313,28 @@ app.get(
   })
 )
 
-// you can only mark your own
+// you can only mark your own, and only at a level you are allowed
 app.put(
   '/api/sholat',
   auth(async (req, res) => {
-    const { date, prayer, ontime } = req.body
+    const { date, prayer } = req.body
+    const level = req.body.level || null
     if (!isDate(date) || !PRAYERS.includes(prayer)) return res.status(400).json({ error: 'bad mark' })
+    if (level && !levelsFor(req.email).includes(level)) return res.status(400).json({ error: 'bad level' })
     if (date > today()) return res.status(400).json({ error: 'that day has not happened yet' })
     await db.execute(
-      ontime
+      level
         ? {
-            sql: 'INSERT OR IGNORE INTO sholat (email, date, prayer) VALUES (?, ?, ?)',
-            args: [req.email, date, prayer],
+            sql: `INSERT INTO sholat (email, date, prayer, level) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(email, date, prayer) DO UPDATE SET level = excluded.level`,
+            args: [req.email, date, prayer, level],
           }
         : {
             sql: 'DELETE FROM sholat WHERE email = ? AND date = ? AND prayer = ?',
             args: [req.email, date, prayer],
           }
     )
-    res.json({ email: req.email, date, prayer, ontime: Boolean(ontime) })
+    res.json({ email: req.email, date, prayer, level })
   })
 )
 
@@ -333,27 +348,41 @@ app.get(
     // ponytail: reads the window, not the table. Aggregate in SQL if this ever gets slow.
     const rows = await all('SELECT * FROM sholat WHERE date >= ?', [since])
 
-    const marks = new Set(rows.map((r) => `${r.email}|${r.date}|${r.prayer}`))
-    const has = (email, date, prayer) => marks.has(`${email}|${date}|${prayer}`)
+    const marks = new Map(rows.map((r) => [`${r.email}|${r.date}|${r.prayer}`, r.level || 'ontime']))
+    const at = (email, date, prayer) => marks.get(`${email}|${date}|${prayer}`) || null
     const last30 = Array.from({ length: 30 }, (_, i) => addDays(now, -i))
 
     const byUser = {}
     for (const [email, user] of Object.entries(USERS)) {
-      const onTimeIn = (dates) =>
-        dates.reduce((n, d) => n + PRAYERS.filter((p) => has(email, d, p)).length, 0)
+      const tally = (dates) => {
+        const out = { ontime: 0, masjid: 0, prayed: 0, possible: dates.length * PRAYERS.length }
+        for (const d of dates)
+          for (const p of PRAYERS) {
+            const level = at(email, d, p)
+            if (!level) continue
+            out.prayed++
+            if (ON_TIME.has(level)) out.ontime++
+            if (level === 'masjid') out.masjid++
+          }
+        return out
+      }
 
-      const byPrayer = PRAYERS.map((prayer) => ({
-        prayer,
-        ontime: last30.filter((d) => has(email, d, prayer)).length,
-        possible: last30.length,
-      }))
+      const byPrayer = PRAYERS.map((prayer) => {
+        const days = last30.map((d) => at(email, d, prayer))
+        return {
+          prayer,
+          ontime: days.filter((l) => l && ON_TIME.has(l)).length,
+          prayed: days.filter(Boolean).length,
+          possible: last30.length,
+        }
+      })
 
-      // consecutive complete days back from today (today still in progress, so it
-      // extends a streak but never breaks one)
+      // consecutive days back from today with all five on time (today is still in
+      // progress, so it can extend a streak but never break one)
       let streak = 0
       for (let i = 0; i < 365; i++) {
         const d = addDays(now, -i)
-        const complete = PRAYERS.every((p) => has(email, d, p))
+        const complete = PRAYERS.every((p) => ON_TIME.has(at(email, d, p)))
         if (complete) streak++
         else if (i > 0) break
       }
@@ -362,12 +391,13 @@ app.get(
       const weekly = Array.from({ length: 8 }, (_, i) => {
         const week = addDays(thisMonday, -7 * (7 - i))
         const days = Array.from({ length: 7 }, (_, j) => addDays(week, j)).filter((d) => d <= now)
-        return { week, ontime: onTimeIn(days), possible: days.length * PRAYERS.length }
+        return { week, ...tally(days) }
       })
 
       byUser[email] = {
         name: user.name,
-        last30: { ontime: onTimeIn(last30), possible: last30.length * PRAYERS.length },
+        levels: levelsFor(email),
+        last30: tally(last30),
         byPrayer,
         streak,
         weekly,

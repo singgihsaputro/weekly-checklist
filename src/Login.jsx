@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Logo from './Logo.jsx'
 
 const MESSAGES = {
   denied: 'That account cannot use this app. Only the two invited Google accounts can sign in.',
@@ -19,8 +20,8 @@ export default function Login() {
   return (
     <div className="login">
       <div className="panel">
-        <div className="icon">✅</div>
-        <h1>Weekly Checklist</h1>
+        <Logo size={64} />
+        <h1>Daily Routines</h1>
         <p className="intro">Private. Two invited Google accounts only.</p>
 
         {notice && (
