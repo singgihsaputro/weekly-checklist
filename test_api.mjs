@@ -255,7 +255,8 @@ try {
     const r = await bearer('Bearer test-cron-secret')
     assert.equal(r.status, 200, 'the scheduler gets in')
     const report = await r.json()
-    assert.match(report.subject, /^Daily Routines — /)
+    assert.match(report.subject, /^SingFams Daily Routines - /)
+    assert.ok(report.html.includes('Sholat Subuh') || report.html.includes('Subuh'), 'pills carry full prayer names')
     assert.equal(report.people.length, 2, 'both people are in the report')
 
     const him = report.people.find((p) => p.email === SINGGIH)

@@ -470,6 +470,8 @@ app.get(
 const dayOffset = (week, date) =>
   Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${week}T12:00:00Z`)) / 86400000)
 
+const REPORT_TITLE = 'SingFams Daily Routines'
+
 // Pure, so it can be tested without a database or an inbox.
 export const buildReport = ({ date, rows, tasks }) => {
   const level = (email, item) =>
@@ -503,7 +505,7 @@ export const buildReport = ({ date, rows, tasks }) => {
   const tasksDone = mine.filter((t) => t.done).length
 
   // ---- plain text, for clients that show it and for anyone who prefers it ----
-  const lines = [`Daily Routines — ${pretty}`, '']
+  const lines = [`${REPORT_TITLE} - ${pretty}`, '']
   for (const p of people) {
     lines.push(`${p.name} — ${p.kept}/${p.total} routines`)
     lines.push(
@@ -533,12 +535,15 @@ export const buildReport = ({ date, rows, tasks }) => {
   }
 
   const bar = (kept, total) => {
-    const pct = Math.round((kept / total) * 100)
+    const pct = Math.max(0, Math.min(100, Math.round((kept / total) * 100)))
+    const cells = []
+    if (pct > 0)
+      cells.push(
+        `<td width="${pct}%" height="9" style="background:#2e7d52;border-radius:999px;font-size:0;line-height:0">&nbsp;</td>`
+      )
+    if (pct < 100) cells.push(`<td width="${100 - pct}%" height="9" style="font-size:0;line-height:0">&nbsp;</td>`)
     return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#eceae6;border-radius:999px">
-      <tr>
-        <td width="${pct}%" height="9" style="background:#2e7d52;border-radius:999px;font-size:0;line-height:0">&nbsp;</td>
-        <td height="9" style="font-size:0;line-height:0">&nbsp;</td>
-      </tr>
+      <tr>${cells.join('')}</tr>
     </table>`
   }
 
@@ -546,8 +551,8 @@ export const buildReport = ({ date, rows, tasks }) => {
     `<table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>${p.sholat
       .map((x, i) => {
         const t = TONE[x.level] || TONE['']
-        return `${i ? '<td width="6" style="font-size:0">&nbsp;</td>' : ''}<td align="center" style="background:${t.bg};color:${t.fg};border-radius:7px;padding:7px 0;font-size:12px;font-weight:700;letter-spacing:.3px">${esc(
-          x.label.slice(0, 2)
+        return `${i ? '<td width="4" style="font-size:0">&nbsp;</td>' : ''}<td align="center" width="19%" style="background:${t.bg};color:${t.fg};border-radius:7px;padding:7px 2px;font-size:11px;font-weight:700;white-space:nowrap">${esc(
+          x.label
         )}</td>`
       })
       .join('')}</tr></table>`
@@ -585,7 +590,7 @@ export const buildReport = ({ date, rows, tasks }) => {
         <tr>
           <td width="42" style="padding-right:12px"><img src="${esc(url)}/icon-192.png" width="42" height="42" alt="" style="display:block;border-radius:11px"></td>
           <td>
-            <div style="font-size:19px;font-weight:700;line-height:1.2">Daily Routines</div>
+            <div style="font-size:19px;font-weight:700;line-height:1.2">${esc(REPORT_TITLE)}</div>
             <div style="font-size:13px;color:${MUTED}">${esc(pretty)}</div>
           </td>
         </tr>
@@ -606,7 +611,7 @@ export const buildReport = ({ date, rows, tasks }) => {
   </table>
 </div>`
 
-  return { subject: `Daily Routines — ${pretty}`, text: lines.join('\n'), html, people }
+  return { subject: `${REPORT_TITLE} - ${pretty}`, text: lines.join('\n'), html, people }
 }
 
 const appUrl = () => (env('APP_URL') || 'https://weekly-checklist-xnk2.vercel.app').replace(/\/+$/, '')
@@ -627,7 +632,7 @@ const sendEmail = async ({ subject, text, html }) => {
     method: 'POST',
     headers: { 'api-key': key, 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
-      sender: { email: from, name: 'Daily Routines' },
+      sender: { email: from, name: REPORT_TITLE },
       to: to.map((email) => ({ email })),
       subject,
       textContent: text,
