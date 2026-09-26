@@ -136,43 +136,37 @@ h1 { font-size: 40px; margin: 8px 0 0; }
   place-items: center;
   padding: 24px;
 }
-.login form {
+.login .panel {
   width: 100%;
   max-width: 360px;
+  text-align: center;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 28px;
+  padding: 32px 28px;
 }
 .login .icon { font-size: 40px; margin: 0; }
 .login h1 { font-size: 26px; margin: 6px 0 0; }
-.login .intro { margin: 4px 0 20px; font-size: 14px; }
-.login label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-.login input {
-  width: 100%;
-  margin-bottom: 14px;
-  padding: 9px 10px;
-  font-size: 15px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  outline-color: var(--d0);
-}
-.login button {
-  width: 100%;
-  padding: 10px;
+.login .intro { margin: 4px auto 22px; font-size: 14px; }
+
+/* Google's own button spec: white surface, 1px grey border, mark on the left */
+.login .google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px;
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
-  background: var(--d0);
-  border: 0;
+  color: #1f1f1f;
+  background: #fff;
+  border: 1px solid #747775;
   border-radius: 6px;
-  cursor: pointer;
+  text-decoration: none;
 }
-.login button:disabled { opacity: 0.5; cursor: not-allowed; }
-.login .hint { font-size: 12px; color: var(--muted); margin: 12px 0 0; text-align: center; }
-.login .error { font-size: 14px; margin: 0 0 12px; }
+.login .google:hover { background: #f2f2f2; }
+.login .hint { font-size: 12px; color: var(--muted); margin: 14px 0 0; }
+.login .error { font-size: 14px; margin: 0 0 16px; text-align: left; }
 
 /* ---- nav ------------------------------------------------------------------ */
 

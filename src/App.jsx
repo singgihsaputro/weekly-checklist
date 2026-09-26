@@ -25,7 +25,7 @@ export default function App() {
   }
 
   if (me === undefined) return <p className="boot">Loading…</p>
-  if (!me) return <Login onSignedIn={setMe} />
+  if (!me) return <Login />
 
   const onDashboard = hash.startsWith('#/dashboard')
 

@@ -4,7 +4,8 @@ React + Express + SQLite (via libSQL). Runs off a local file on your machine,
 off a hosted [Turso](https://turso.tech) database when `TURSO_DATABASE_URL` is set.
 
 A shared weekly task list, a per-person record of which prayers were on time, and
-one analytics page comparing the two. Two accounts, password login, no sign-up.
+one analytics page comparing the two. Sign in with Google; two allowlisted
+accounts, no sign-up.
 
 ## Local
 
@@ -26,7 +27,8 @@ automatically. Values already in the environment win, so CI and Vercel override 
 | Variable | Why |
 |---|---|
 | `SESSION_SECRET` | signs the session cookie; changing it signs everyone out |
-| `PASSWORD_SINGGIH`, `PASSWORD_TITIS` | one per account. **Unset means login always fails** |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | the Google OAuth web client. **Unset means sign-in always fails** |
+| `OAUTH_REDIRECT_URI` | must match a URI registered on that client, exactly |
 | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | hosted DB; without them it uses a local file |
 | `APP_TZ` | day boundaries (default `Asia/Jakarta`) |
 | `PORT`, `DB_PATH` | local only — default 3001 and `./data.db` |
@@ -74,8 +76,23 @@ function (`vercel.json` routes every `/api/*` request to it). No disk, so the da
    leave the build settings alone.
 
 3. Add every variable from the table above (Settings → Environment Variables), then
-   deploy. `SESSION_SECRET` and the two passwords are required — login fails closed
-   without them, which locks *everyone* out, not just strangers.
+   deploy. `SESSION_SECRET` and the Google client are required — sign-in fails
+   closed without them, which locks *everyone* out, not just strangers.
+
+### The Google client
+
+In the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+create an **OAuth client ID** of type *Web application* and register both redirect
+URIs exactly:
+
+```
+https://<your-app>.vercel.app/api/auth/callback
+http://localhost:3001/api/auth/callback
+```
+
+On the consent screen, keep the app in *Testing* and add both addresses as test
+users — that is a second gate in front of the allowlist, not a replacement for it.
+Only `openid email` is requested, so Google hands back an address and nothing else.
 
 Redeploys never touch the data — it lives in Turso, not in the build.
 
@@ -196,18 +213,28 @@ Swap to Postgres only if you outgrow it — 4 queries in `server.js` change, not
 
 ## Auth
 
-Two hardcoded accounts in `server.js`; passwords come from env vars and are never
-stored in the database or the repo. The session is an HMAC-signed cookie —
-`HttpOnly`, `SameSite=Lax`, `Secure` in production, and a ten-year `Max-Age`, so
-nobody gets signed out in practice. Signing out clears it; rotating
-`SESSION_SECRET` invalidates every session at once.
+Google decides *who someone is*; the allowlist in `server.js` decides *who gets
+in*. There are no passwords anywhere — not in the repo, not in the database, not
+in an env var.
 
-There is **no login rate limit** — serverless has no shared counter, and the
-generated passwords are long random strings. If that stops being true, add an
-attempt counter in Turso.
+The flow is the authorization-code one, with `state` (CSRF), `nonce` (replay) and
+PKCE `S256`, all carried in a short-lived signed cookie rather than server memory,
+since serverless has none. On the way back the `id_token` is checked for issuer,
+audience, expiry, matching nonce, `email_verified`, and finally membership of the
+allowlist. Anything short of all of those redirects to `/?auth=denied`, with one
+reason code for every failure so a stranger learns nothing from which.
+
+The token is read without verifying its signature *because* it is fetched over TLS
+directly from Google's token endpoint rather than passed through the browser —
+Google documents this case. Move to JWKS verification if a token ever starts
+arriving by another route.
+
+The session itself is an HMAC-signed cookie — `HttpOnly`, `SameSite=Lax`, `Secure`
+in production, ten-year `Max-Age`, so nobody gets signed out in practice. Signing
+out clears it; rotating `SESSION_SECRET` invalidates every session at once.
 
 ## Not included
 
-No sign-up, no password reset (rotate the env var), no drag-reorder, no recurring
-tasks. Tasks are shared between both accounts by design; only sholat marks are
+No sign-up, no refresh tokens (the session outlives them and nothing calls Google
+again), no drag-reorder, no recurring tasks. Tasks are shared between both accounts by design; only sholat marks are
 per-person.

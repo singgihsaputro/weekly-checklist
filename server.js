@@ -1,6 +1,6 @@
 import express from 'express'
 import { createClient } from '@libsql/client'
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 // .env.local in dev; on Vercel the platform injects the real env
 try {
@@ -14,10 +14,11 @@ const db = createClient(
     : { url: `file:${process.env.DB_PATH || 'data.db'}` }
 )
 
-// The whole app is these two people. Passwords live in env vars, never here.
+// The whole app is these two people. Google vouches for who someone is; this
+// list decides who is let in. Any other Google account is bounced at the callback.
 const USERS = {
-  'singgih.rochmad@gmail.com': { name: 'Singgih', pass: 'PASSWORD_SINGGIH' },
-  'titis.ekaaprilia@gmail.com': { name: 'Titis', pass: 'PASSWORD_TITIS' },
+  'singgih.rochmad@gmail.com': { name: 'Singgih' },
+  'titis.ekaaprilia@gmail.com': { name: 'Titis' },
 }
 
 const PRAYERS = ['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya']
@@ -73,10 +74,43 @@ const readCookie = (req, name) => {
   return null
 }
 
-// hashed first so a wrong-length guess costs the same as a wrong-value one
-const secretsMatch = (a, b) => {
-  const h = (v) => createHash('sha256').update(String(v ?? ''), 'utf8').digest()
-  return timingSafeEqual(h(a), h(b))
+// ---- google sign-in --------------------------------------------------------
+
+const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth'
+// overridable so the tests can point the exchange at a local stub; nothing sets
+// it in production, where it stays Google's endpoint
+const GOOGLE_TOKEN = process.env.OAUTH_TOKEN_ENDPOINT || 'https://oauth2.googleapis.com/token'
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
+const REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || 'http://localhost:3001/api/auth/callback'
+const FLOW = 'oauth_flow' // short-lived: carries state, nonce and the PKCE verifier
+
+const configured = () => Boolean(SECRET && CLIENT_ID && CLIENT_SECRET)
+const b64url = (buf) => buf.toString('base64url')
+
+// The id_token arrives over TLS straight from Google's token endpoint, so its
+// signature is already accounted for; these claims still have to be checked.
+const claimsOf = (idToken) => {
+  const parts = String(idToken || '').split('.')
+  if (parts.length !== 3) return null
+  try {
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+  } catch {
+    return null
+  }
+}
+
+const ISSUERS = ['accounts.google.com', 'https://accounts.google.com']
+
+export const emailFromClaims = (claims, nonce) => {
+  if (!claims) return null
+  if (claims.aud !== CLIENT_ID) return null
+  if (!ISSUERS.includes(claims.iss)) return null
+  if (!claims.exp || claims.exp * 1000 < Date.now()) return null
+  if (claims.nonce !== nonce) return null
+  if (claims.email_verified !== true && claims.email_verified !== 'true') return null
+  const email = String(claims.email || '').trim().toLowerCase()
+  return USERS[email] ? email : null
 }
 
 // ---- schema ----------------------------------------------------------------
@@ -135,27 +169,63 @@ const auth = (fn) =>
     await fn(req, res)
   })
 
-app.post(
-  '/api/login',
+const cookieOpts = (maxAge) => ({
+  httpOnly: true,
+  sameSite: 'lax', // must survive the top-level redirect back from Google
+  secure: Boolean(process.env.VERCEL),
+  maxAge,
+  path: '/',
+})
+
+app.get('/api/auth/google', (req, res) => {
+  if (!configured()) return res.redirect('/?auth=unconfigured')
+  const state = b64url(randomBytes(16))
+  const nonce = b64url(randomBytes(16))
+  const verifier = b64url(randomBytes(32))
+  res.cookie(FLOW, sign({ state, nonce, verifier }), cookieOpts(10 * 60 * 1000))
+  const url = new URL(GOOGLE_AUTH)
+  url.search = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    scope: 'openid email',
+    state,
+    nonce,
+    code_challenge: b64url(createHash('sha256').update(verifier).digest()),
+    code_challenge_method: 'S256',
+    prompt: 'select_account',
+  })
+  res.redirect(url.toString())
+})
+
+app.get(
+  '/api/auth/callback',
   route(async (req, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase()
-    const password = String(req.body?.password || '')
-    const user = USERS[email]
-    // ponytail: no rate limit — serverless has no shared counter. The passwords are
-    // long random strings; add a Turso-backed attempt counter if that stops being true.
-    const expected = user && process.env[user.pass]
-    if (!SECRET || !expected || !secretsMatch(password, expected)) {
-      await new Promise((r) => setTimeout(r, 400))
-      return res.status(401).json({ error: 'wrong email or password' })
-    }
-    res.cookie(COOKIE, sign({ email, at: Date.now() }), {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: Boolean(process.env.VERCEL),
-      maxAge: TEN_YEARS,
-      path: '/',
+    const flow = verify(readCookie(req, FLOW))
+    res.clearCookie(FLOW, { path: '/' })
+    // one reason code for every failure — a stranger learns nothing from which
+    if (!configured() || req.query.error || !flow || !req.query.state || req.query.state !== flow.state)
+      return res.redirect('/?auth=denied')
+
+    const token = await fetch(GOOGLE_TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(req.query.code || ''),
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        redirect_uri: REDIRECT_URI,
+        grant_type: 'authorization_code',
+        code_verifier: flow.verifier,
+      }),
     })
-    res.json({ email, name: user.name, users: roster() })
+    if (!token.ok) return res.redirect('/?auth=denied')
+
+    const email = emailFromClaims(claimsOf((await token.json()).id_token), flow.nonce)
+    if (!email) return res.redirect('/?auth=denied')
+
+    res.cookie(COOKIE, sign({ email, at: Date.now() }), cookieOpts(TEN_YEARS))
+    res.redirect('/')
   })
 )
 
