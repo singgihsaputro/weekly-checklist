@@ -87,8 +87,13 @@ URIs exactly:
 
 ```
 https://<your-app>.vercel.app/api/auth/callback
-http://localhost:3001/api/auth/callback
+http://localhost:5173/api/auth/callback
 ```
+
+The second one is for `npm run dev`, where vite serves the app on 5173 and
+proxies `/api` to the server — coming back to 3001 would land on a port with no
+app on it. Add `http://localhost:3001/api/auth/callback` too if you use
+`npm start` locally.
 
 On the consent screen, keep the app in *Testing* and add both addresses as test
 users — that is a second gate in front of the allowlist, not a replacement for it.

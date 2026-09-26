@@ -82,7 +82,7 @@ const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN = process.env.OAUTH_TOKEN_ENDPOINT || 'https://oauth2.googleapis.com/token'
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || 'http://localhost:3001/api/auth/callback'
+const REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || 'http://localhost:5173/api/auth/callback'
 const FLOW = 'oauth_flow' // short-lived: carries state, nonce and the PKCE verifier
 
 const configured = () => Boolean(SECRET && CLIENT_ID && CLIENT_SECRET)
