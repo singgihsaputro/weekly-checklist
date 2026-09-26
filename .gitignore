@@ -3,3 +3,5 @@ dist
 data.db*
 .DS_Store
 compare_lokalise.py
+.vercel
+.env*
