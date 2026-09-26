@@ -81,7 +81,7 @@ async function signIn({ claims = {}, tamperState, dropFlowCookie } = {}) {
 
 try {
   // ---- the gate -----------------------------------------------------------
-  for (const path of ['/api/tasks?week=2026-09-21', '/api/stats', '/api/sholat?week=2026-09-21', '/api/me'])
+  for (const path of ['/api/tasks?week=2026-09-21', '/api/stats', '/api/routines?week=2026-09-21', '/api/me'])
     assert.equal((await call(path)).status, 401, `${path} needs a session`)
 
   // ---- the authorize request ---------------------------------------------
@@ -138,8 +138,15 @@ try {
   assert.equal(me.name, 'Singgih')
   assert.equal(me.users.length, 2, 'roster carries both people')
   const rosterOf = (email) => me.users.find((u) => u.email === email)
-  assert.deepEqual(rosterOf(SINGGIH).levels, ['sholat', 'ontime', 'masjid'], 'masjid is his to use')
-  assert.deepEqual(rosterOf(TITIS).levels, ['sholat', 'ontime'], 'and not hers')
+  assert.deepEqual(rosterOf(SINGGIH).levels.sholat, ['sholat', 'ontime', 'masjid'], 'masjid is his to use')
+  assert.deepEqual(rosterOf(TITIS).levels.sholat, ['sholat', 'ontime'], 'and not hers')
+  assert.deepEqual(rosterOf(TITIS).levels.done, ['done'], 'the plain routines are the same for both')
+  assert.equal(me.routines.length, 12, 'five prayers plus seven other routines')
+  assert.equal(me.routines.filter((r) => r.kind === 'sholat').length, 5)
+  assert.ok(
+    me.routines.some((r) => r.key === 'minum_vitamin' && r.kind === 'done'),
+    'the catalogue carries the non-sholat routines'
+  )
 
   const forged = cookie
   cookie = 'session=eyJlbWFpbCI6InNpbmdnaWgucm9jaG1hZEBnbWFpbC5jb20ifQ.deadbeef'
@@ -165,29 +172,38 @@ try {
   assert.equal((await call(`/api/tasks/${made.id}`, { method: 'DELETE' })).status, 204)
   assert.equal((await json(`/api/tasks?week=${week}`)).length, 0)
 
-  // ---- sholat -------------------------------------------------------------
-  assert.deepEqual(await json(`/api/sholat?week=${week}`), [], 'nothing is recorded to start with')
-  const put = (body) => call('/api/sholat', { method: 'PUT', body: JSON.stringify(body) })
-  assert.equal((await put({ date: iso(), prayer: 'nope', level: 'ontime' })).status, 400, 'rejects an unknown prayer')
-  assert.equal((await put({ date: iso(3), prayer: 'subuh', level: 'ontime' })).status, 400, 'rejects a future day')
-  assert.equal((await put({ date: iso(), prayer: 'subuh', level: 'invented' })).status, 400, 'rejects an unknown level')
+  // ---- routines -----------------------------------------------------------
+  assert.deepEqual(await json(`/api/routines?week=${week}`), [], 'nothing is recorded to start with')
+  const put = (body) => call('/api/routines', { method: 'PUT', body: JSON.stringify(body) })
+  assert.equal((await put({ date: iso(), item: 'invented', level: 'done' })).status, 400, 'rejects an unknown routine')
+  assert.equal((await put({ date: iso(3), item: 'sholat_subuh', level: 'ontime' })).status, 400, 'rejects a future day')
+  assert.equal(
+    (await put({ date: iso(), item: 'sholat_subuh', level: 'invented' })).status,
+    400,
+    'rejects an unknown level'
+  )
+  // the two kinds do not share a scale
+  assert.equal((await put({ date: iso(), item: 'olahraga_pagi', level: 'masjid' })).status, 400, 'a habit is not a prayer')
+  assert.equal((await put({ date: iso(), item: 'sholat_subuh', level: 'done' })).status, 400, 'a prayer is not a habit')
 
-  await put({ date: iso(), prayer: 'subuh', level: 'sholat' })
-  await put({ date: iso(), prayer: 'isya', level: 'ontime' })
-  await put({ date: iso(), prayer: 'maghrib', level: 'masjid' })
-  let marks = await json(`/api/sholat?week=${week}`)
-  assert.equal(marks.length, 3, 'three marks stored')
+  await put({ date: iso(), item: 'sholat_subuh', level: 'sholat' })
+  await put({ date: iso(), item: 'sholat_isya', level: 'ontime' })
+  await put({ date: iso(), item: 'sholat_maghrib', level: 'masjid' })
+  await put({ date: iso(), item: 'olahraga_pagi', level: 'done' })
+  await put({ date: iso(), item: 'minum_vitamin', level: 'done' })
+  let marks = await json(`/api/routines?week=${week}`)
+  assert.equal(marks.length, 5, 'five marks stored')
   assert.ok(marks.every((m) => m.email === SINGGIH), 'marks belong to the signed-in user')
-  assert.equal(marks.find((m) => m.prayer === 'maghrib').level, 'masjid', 'level is stored, not just presence')
+  assert.equal(marks.find((m) => m.item === 'sholat_maghrib').level, 'masjid', 'level is stored, not just presence')
 
   // changing a level replaces it rather than adding a second row
-  await put({ date: iso(), prayer: 'subuh', level: 'ontime' })
-  marks = await json(`/api/sholat?week=${week}`)
-  assert.equal(marks.length, 3, 'still three rows')
-  assert.equal(marks.find((m) => m.prayer === 'subuh').level, 'ontime', 'the level moved up')
+  await put({ date: iso(), item: 'sholat_subuh', level: 'ontime' })
+  marks = await json(`/api/routines?week=${week}`)
+  assert.equal(marks.length, 5, 'still five rows')
+  assert.equal(marks.find((m) => m.item === 'sholat_subuh').level, 'ontime', 'the level moved up')
 
-  await put({ date: iso(), prayer: 'isya', level: null })
-  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, 'clearing removes the row')
+  await put({ date: iso(), item: 'sholat_isya', level: null })
+  assert.equal((await json(`/api/routines?week=${week}`)).length, 4, 'clearing removes the row')
 
   // ---- stats --------------------------------------------------------------
   const stats = await json('/api/stats')
@@ -196,8 +212,12 @@ try {
   assert.equal(mine.last30.ontime, 2, 'ontime and masjid both count as on time')
   assert.equal(mine.last30.masjid, 1, 'masjid counted separately too')
   assert.equal(mine.last30.prayed, 2, 'prayed counts every level')
-  assert.equal(mine.last30.possible, 150, '30 days x 5 prayers')
-  assert.equal(mine.byPrayer.find((p) => p.prayer === 'subuh').ontime, 1)
+  assert.equal(mine.last30.possible, 150, '30 days x 5 prayers — habits are not in this number')
+  assert.equal(mine.byPrayer.find((p) => p.item === 'sholat_subuh').ontime, 1)
+  assert.equal(mine.byRoutine.length, 7, 'the seven other routines are reported')
+  assert.equal(mine.byRoutine.find((r) => r.item === 'olahraga_pagi').done, 1)
+  assert.equal(mine.byRoutine.find((r) => r.item === 'mandi_pagi').done, 0)
+  assert.equal(mine.byRoutine.find((r) => r.item === 'minum_vitamin').possible, 30)
   assert.equal(mine.weekly.length, 8, 'eight weeks of trend')
   assert.equal(mine.streak, 0, 'two prayers today is not a complete day')
   assert.ok(mine.weekly[7].possible <= 35, 'the current week counts only the days so far')
@@ -206,13 +226,17 @@ try {
   cookie = (await signIn({ claims: { email: TITIS } })).session
   assert.ok(cookie, 'the other invited account is let in too')
   assert.equal((await json('/api/me')).name, 'Titis')
-  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, "sees the other person's marks")
+  assert.equal((await json(`/api/routines?week=${week}`)).length, 4, "sees the other person's marks")
 
   // the masjid level is his, not hers — the server decides, not the client
-  assert.equal((await put({ date: iso(), prayer: 'ashar', level: 'masjid' })).status, 400, 'masjid is refused for her')
-  assert.equal((await json(`/api/sholat?week=${week}`)).length, 2, 'and nothing was written')
+  assert.equal(
+    (await put({ date: iso(), item: 'sholat_ashar', level: 'masjid' })).status,
+    400,
+    'masjid is refused for her'
+  )
+  assert.equal((await json(`/api/routines?week=${week}`)).length, 4, 'and nothing was written')
 
-  await put({ date: iso(), prayer: 'ashar', level: 'ontime' })
+  await put({ date: iso(), item: 'sholat_ashar', level: 'ontime' })
   const after = await json('/api/stats')
   assert.equal(after.byUser[TITIS].last30.ontime, 1, 'writes land on the signed-in user')
   assert.equal(after.byUser[TITIS].last30.masjid, 0, 'she has no masjid prayers')

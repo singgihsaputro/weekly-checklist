@@ -12,14 +12,6 @@ export async function api(url, opts) {
 
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-export const PRAYERS = [
-  { key: 'subuh', label: 'Subuh', short: 'Sb' },
-  { key: 'dzuhur', label: 'Dzuhur', short: 'Dz' },
-  { key: 'ashar', label: 'Ashar', short: 'As' },
-  { key: 'maghrib', label: 'Maghrib', short: 'Mg' },
-  { key: 'isya', label: 'Isya', short: 'Is' },
-]
-
 // local calendar date, not UTC — the day must not flip at 07:00 Jakarta time
 export const ymd = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -47,20 +39,18 @@ export const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day:
 
 export const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0)
 
-// Worst to best; the empty key is "nothing recorded", which is no row at all.
-// Glyphs differ in shape as well as colour, so the scale survives a greyscale
-// screen or a colourblind reader.
+// Worst to best; the empty key is "not recorded", which is no row at all. The
+// wording is what the dropdown shows, so it has to read on its own.
 export const LEVEL_INFO = {
-  '': { label: 'nothing recorded', mark: '–' },
-  sholat: { label: 'sholat, not on time', mark: '○' },
-  ontime: { label: 'on time', mark: '●' },
-  masjid: { label: 'on time in masjid', mark: '◉' },
+  '': { label: 'Not recorded' },
+  sholat: { label: 'Sholat, late' },
+  ontime: { label: 'On time' },
+  masjid: { label: 'On time in masjid' },
+  done: { label: 'Done' },
 }
 
-export const nextLevel = (level, allowed) => {
-  const order = ['', ...allowed]
-  return order[(order.indexOf(level || '') + 1) % order.length]
-}
+// anything recorded counts towards the day's progress; only these count as "well"
+export const GOOD = new Set(['ontime', 'masjid', 'done'])
 
 export const dayIndex = (week, date) =>
   Math.round((new Date(`${date}T12:00:00`) - new Date(`${week}T12:00:00`)) / 86400000)

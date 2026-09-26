@@ -218,49 +218,71 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
 
 /* ---- sholat grid inside a day card ---------------------------------------- */
 
-.sholat { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
-.sholat-head, .sholat-row {
-  display: grid;
-  grid-template-columns: 1fr repeat(5, 22px);
+/* the card's colour is the day accent; the routine block is plain text again */
+.routines { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--text); }
+.person + .person { margin-top: 16px; }
+.person h3 {
+  display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 8px;
 }
-.sholat-head { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
-.sholat-head abbr { text-align: center; text-decoration: none; cursor: help; }
-.sholat-row { font-size: 13px; color: var(--muted); padding: 1px 0; }
-.sholat-row .me { color: var(--text); font-weight: 600; }
-/* one tap cycles: nothing → sholat → on time → (masjid) → nothing */
-.lv {
-  justify-self: stretch;
-  height: 26px;
-  padding: 0;
-  border: 0;
+.person h3 .me { color: var(--text); }
+.person h3 .muted { margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+/* two columns when the card is wide enough, one when it is not */
+.routine-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 16px; }
+.routine-list label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.routine-list select {
+  flex: 0 1 136px;
+  min-width: 0;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: none;
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
 }
-.lv:disabled { cursor: default; }
-.lv:not(:disabled):hover { background: var(--hover); }
-.lv-none { color: #c9c8c4; }
-.lv-sholat { color: #8a8984; }
+.routine-list select:disabled { background: var(--card); opacity: 0.75; }
+
+/* the week view shows a score per person; tapping it opens that day */
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.summary:hover { background: var(--hover); }
+.summary .muted { margin-left: auto; font-size: 13px; }
+.summary .me { font-weight: 600; }
+
+.ring { color: var(--d4); flex: none; transition: color 0.3s; }
+.ring.full { color: #2e7d52; }
+
+/* the level still reads at a glance, the words just carry it now */
+.lv-none { color: var(--muted); }
+.lv-sholat { color: #8a6d3b; }
 .lv-ontime { color: #2e7d52; }
 .lv-masjid { color: #1c5cab; }
-
-/* the scale, spelled out once instead of in every card */
-.scale {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  margin: -4px 0 16px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.scale b { font-size: 14px; }
-
 .viewtoggle { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .viewtoggle button {
+  position: relative;
   border: 0;
   border-radius: 0;
   background: var(--card);
@@ -268,8 +290,11 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
   font-size: 14px;
   color: var(--muted);
   cursor: pointer;
+  transition: color 0.2s;
 }
-.viewtoggle button.on { background: var(--text); color: #fff; }
+.viewtoggle button.on { color: #fff; }
+.viewtoggle button span { position: relative; z-index: 1; }
+.viewtoggle .pill { position: absolute; inset: 0; background: var(--text); z-index: 0; }
 
 .grid.one { grid-template-columns: minmax(0, 560px); }
 
@@ -359,8 +384,9 @@ body { -webkit-tap-highlight-color: transparent; }
   .weekbar button { padding: 8px 14px; font-size: 16px; }
   .viewtoggle { flex: 1 0 100%; }
   .viewtoggle button { flex: 1; }
-  .range { min-width: 0; flex: 1; font-size: 15px; white-space: nowrap; }
-  .count { margin-left: 0; }
+  .range { flex: 1 1 auto; font-size: 15px; white-space: nowrap; }
+  /* its own row, or it squeezes the date until the date is cut off */
+  .count { flex: 1 0 100%; margin-left: 0; text-align: right; }
 
   .nav { gap: 14px; }
   .nav .who { font-size: 13px; }
@@ -373,11 +399,11 @@ body { -webkit-tap-highlight-color: transparent; }
   .del { font-size: 22px; padding: 0 4px; }
 
   /* five columns wide enough to hit without zooming in */
-  .sholat-head, .sholat-row { grid-template-columns: 1fr repeat(5, 38px); }
-  .sholat-head { font-size: 12px; }
-  .sholat-row { font-size: 14px; min-height: 36px; }
-  .lv { height: 36px; font-size: 19px; }
-  .scale { font-size: 12px; gap: 3px 14px; }
+  /* 16px or iOS zooms the page when the picker opens */
+  .routine-list { grid-template-columns: 1fr; gap: 8px; }
+  .routine-list label { font-size: 15px; }
+  .routine-list select { font-size: 16px; padding: 8px; flex: 0 1 180px; }
+  .summary { padding: 10px 8px; font-size: 15px; }
   .viewtoggle button { padding: 8px 16px; font-size: 15px; }
 
   /* SVG text is in viewBox units, so it shrinks with the chart — size it back up */

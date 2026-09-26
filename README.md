@@ -3,9 +3,9 @@
 React + Express + SQLite (via libSQL). Runs off a local file on your machine,
 off a hosted [Turso](https://turso.tech) database when `TURSO_DATABASE_URL` is set.
 
-A shared task list, a per-person record of how each prayer went, and one analytics
-page comparing the two. Readable by week or one day at a time. Sign in with
-Google; two allowlisted accounts, no sign-up.
+A shared task list, a per-person record of twelve daily routines, and one
+analytics page comparing the two. Readable by week or one day at a time. Sign in
+with Google; two allowlisted accounts, no sign-up.
 
 Installable: it ships a web manifest and iOS home-screen icons, so *Add to Home
 Screen* gives it an app icon and a standalone window. There is deliberately **no
@@ -207,28 +207,43 @@ SQLite, reached through `@libsql/client` — a local file in dev, Turso in produ
 | `text` | task text (max 500 chars) |
 | `done` | 0/1 |
 
-`sholat` — per account. **A row records how the prayer went; no row means nothing
-was recorded.** The fourth state is the absence of data, so a fresh day costs no
-writes, and clearing a mark deletes rather than updates.
+`routine` — per account. **A row records how a routine went; no row means nothing
+was recorded.** "Not recorded" is the absence of data, so a fresh day costs no
+writes and clearing a mark deletes rather than updates.
 
 | column | meaning |
 |---|---|
 | `email` | whose mark it is; you can only write your own |
 | `date` | `YYYY-MM-DD` in `APP_TZ` |
-| `prayer` | `subuh` / `dzuhur` / `ashar` / `maghrib` / `isya` |
-| `level` | `sholat` < `ontime` < `masjid` |
+| `item` | a key from `ROUTINES` in `server.js` |
+| `level` | depends on the item's kind |
 
-Primary key is `(email, date, prayer)`, so changing a level replaces the row
-instead of adding one.
+Primary key is `(email, date, item)`, so changing a level replaces the row instead
+of adding one.
 
-`masjid` is allowed **only for Singgih** — the roster in `server.js` says who may
-use which levels, and `PUT /api/sholat` enforces it, so the browser cannot talk
-its way past it. Both `ontime` and `masjid` count as on time in the stats;
-`masjid` is also counted on its own.
+The twelve routines come in two kinds, listed in the order the day happens:
 
-Rows written before levels existed are migrated to `ontime`, which is what they
-meant. The `ALTER TABLE` runs on every boot and is allowed to fail once the
-column is there.
+| kind | items | levels |
+|---|---|---|
+| `sholat` | Subuh, Dzuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
+| `done` | Mengaji pagi, Olahraga pagi, Mandi pagi, Mandi sore, Mengaji habis Maghrib, Makan, Minum vitamin | `done` |
+
+The catalogue is served from `/api/me`, so the client never carries its own copy.
+`masjid` is allowed **only for Singgih** — the roster says who may use which levels
+for which kind, and `PUT /api/routines` enforces it, so the browser cannot talk its
+way past it. The kinds do not share a scale either: a habit cannot be `masjid` and
+a prayer cannot be `done`.
+
+Both `ontime` and `masjid` count as on time in the stats; `masjid` is also counted
+on its own.
+
+### Migrations
+
+Prayers used to live in their own `sholat` table, one row per prayer, and before
+that without a `level` column at all. On boot the server adds the missing column
+if needed, copies every row into `routine` as `sholat_<prayer>`, then renames the
+old table to `sholat_pre_routines` — renamed rather than dropped, so the originals
+are still there, and renamed rather than flagged, so the copy cannot run twice.
 
 Swap to Postgres only if you outgrow it — 4 queries in `server.js` change, nothing else.
 
@@ -257,7 +272,8 @@ out clears it; rotating `SESSION_SECRET` invalidates every session at once.
 ## Not included
 
 No sign-up, no refresh tokens (the session outlives them and nothing calls Google
-again), no service worker, no drag-reorder, no recurring tasks. Tasks are shared between both accounts by design; only sholat marks are
+again), no service worker, no drag-reorder, no per-person routine lists — both
+accounts track the same twelve. Tasks are shared between both accounts by design; only sholat marks are
 per-person.
 
 ## On a phone
@@ -289,3 +305,26 @@ One caveat worth knowing: signing in from a standalone iOS window sends you out
 to Google and back, and older iOS versions hand that round trip to Safari
 instead, leaving the session in the wrong place. If sign-in ever seems to "not
 stick" in the installed app, sign in once from inside it rather than from Safari.
+
+## Week view versus day view
+
+Twelve routines times two people is twenty-four dropdowns per day. Rendered seven
+times over, the week view stopped being readable — so it is not rendered that way.
+The week shows one progress ring and a score per person per day, and tapping either
+opens that day. The day view is where the dropdowns live. Entry happens one day at
+a time; the week is for looking.
+
+## Motion
+
+`framer-motion` drives the view transition, the card stagger, task rows growing and
+collapsing, the toggle pill, the progress rings and the counting hero numbers. It
+costs about 48KB gzipped, which roughly doubles the bundle — a real price, paid
+deliberately for the interaction feel.
+
+Everything animated is also correct without animation: `useReducedMotion` is
+honoured throughout, and the reduced-motion path sets final values directly rather
+than animating faster.
+
+Three.js was considered and rejected — a 3D renderer to animate a list of
+dropdowns is the wrong tool. Tailwind was rejected too: the stylesheet already
+works, and converting it would be churn with nothing visible at the end.

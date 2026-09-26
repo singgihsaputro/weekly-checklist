@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, PRAYERS, pct } from './api.js'
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
+import { api, pct } from './api.js'
 
 const SERIES = ['var(--series-1)', 'var(--series-2)']
 const NARROW = '(max-width: 560px)'
@@ -15,6 +16,18 @@ function useNarrow() {
     return () => mq.removeEventListener('change', sync)
   }, [])
   return narrow
+}
+
+function Count({ value, suffix = '' }) {
+  const reduced = useReducedMotion()
+  const raw = useMotionValue(reduced ? value : 0)
+  const shown = useTransform(raw, (v) => Math.round(v) + suffix)
+  useEffect(() => {
+    if (reduced) return raw.set(value)
+    const run = animate(raw, value, { duration: 0.9, ease: [0.2, 0.8, 0.3, 1] })
+    return () => run.stop()
+  }, [value, reduced])
+  return <motion.span>{shown}</motion.span>
 }
 
 const weekLabel = (week) =>
@@ -51,15 +64,23 @@ export default function Dashboard() {
       </div>
 
       <div className="tiles">
-        {users.map((u) => (
-          <div className="tile" key={u.email}>
+        {users.map((u, i) => (
+          <motion.div
+            className="tile"
+            key={u.email}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.35, ease: [0.2, 0.8, 0.3, 1] }}
+          >
             <h3>
               <i style={{ background: u.color }} />
               {u.name}
             </h3>
-            <div className="hero">{pct(u.last30.ontime, u.last30.possible)}%</div>
+            <div className="hero">
+              <Count value={pct(u.last30.ontime, u.last30.possible)} suffix="%" />
+            </div>
             <p className="muted">
-              on time · {u.last30.ontime} of {u.last30.possible} prayers, last 30 days
+              sholat on time · {u.last30.ontime} of {u.last30.possible}, last 30 days
             </p>
             <dl className="sub">
               <div>
@@ -75,7 +96,7 @@ export default function Dashboard() {
                   {u.last30.possible})
                 </dd>
               </div>
-              {u.levels.includes('masjid') && (
+              {u.levels.sholat.includes('masjid') && (
                 <div>
                   <dt>In the masjid</dt>
                   <dd>
@@ -84,11 +105,24 @@ export default function Dashboard() {
                 </div>
               )}
             </dl>
-          </div>
+          </motion.div>
         ))}
       </div>
 
-      <PrayerBars users={users} />
+      <Bars
+        users={users}
+        title="Sholat on time"
+        description="Share of the last 30 days each prayer was on time."
+        rows={(u) => u.byPrayer.map((r) => ({ key: r.item, label: r.label, value: r.ontime, total: r.possible }))}
+      />
+
+      <Bars
+        users={users}
+        title="Other routines kept"
+        description="Share of the last 30 days each routine was recorded as done."
+        rows={(u) => u.byRoutine.map((r) => ({ key: r.item, label: r.label, value: r.done, total: r.possible }))}
+      />
+
       <WeeklyTrend users={users} />
 
       <details className="tableview">
@@ -96,7 +130,7 @@ export default function Dashboard() {
         <table>
           <thead>
             <tr>
-              <th scope="col">Prayer</th>
+              <th scope="col">Routine</th>
               {users.map((u) => (
                 <th scope="col" key={u.email}>
                   {u.name}
@@ -105,42 +139,37 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {PRAYERS.map(({ key, label }) => (
-              <tr key={key}>
-                <th scope="row">{label}</th>
-                {users.map((u) => {
-                  const row = u.byPrayer.find((p) => p.prayer === key)
-                  return (
-                    <td key={u.email}>
-                      {pct(row.ontime, row.possible)}% <span className="muted">({row.ontime}/{row.possible})</span>
-                    </td>
-                  )
-                })}
+            {users[0].byPrayer.map((row, i) => (
+              <tr key={row.item}>
+                <th scope="row">{row.label}</th>
+                {users.map((u) => (
+                  <td key={u.email}>
+                    {pct(u.byPrayer[i].ontime, u.byPrayer[i].possible)}%{' '}
+                    <span className="muted">
+                      ({u.byPrayer[i].ontime}/{u.byPrayer[i].possible} on time)
+                    </span>
+                  </td>
+                ))}
               </tr>
             ))}
-            <tr>
-              <th scope="row">On time, last 30 days</th>
-              {users.map((u) => (
-                <td key={u.email}>
-                  <strong>{pct(u.last30.ontime, u.last30.possible)}%</strong>{' '}
-                  <span className="muted">({u.last30.ontime}/{u.last30.possible})</span>
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <th scope="row">Prayed at all</th>
-              {users.map((u) => (
-                <td key={u.email}>
-                  {pct(u.last30.prayed, u.last30.possible)}%{' '}
-                  <span className="muted">({u.last30.prayed}/{u.last30.possible})</span>
-                </td>
-              ))}
-            </tr>
+            {users[0].byRoutine.map((row, i) => (
+              <tr key={row.item}>
+                <th scope="row">{row.label}</th>
+                {users.map((u) => (
+                  <td key={u.email}>
+                    {pct(u.byRoutine[i].done, u.byRoutine[i].possible)}%{' '}
+                    <span className="muted">
+                      ({u.byRoutine[i].done}/{u.byRoutine[i].possible})
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            ))}
             <tr>
               <th scope="row">In the masjid</th>
               {users.map((u) => (
                 <td key={u.email}>
-                  {u.levels.includes('masjid') ? u.last30.masjid : <span className="muted">not tracked</span>}
+                  {u.levels.sholat.includes('masjid') ? u.last30.masjid : <span className="muted">not tracked</span>}
                 </td>
               ))}
             </tr>
@@ -151,21 +180,25 @@ export default function Dashboard() {
   )
 }
 
-function PrayerBars({ users }) {
+function Bars({ users, title, description, rows }) {
   const narrow = useNarrow()
+  const reduced = useReducedMotion()
+  const data = users.map((u) => ({ ...u, rows: rows(u) }))
+  const labels = data[0].rows
+
   const W = 640
-  const LEFT = narrow ? 96 : 76
+  const LEFT = narrow ? 168 : 190
   const RIGHT = narrow ? 76 : 52
   const plot = W - LEFT - RIGHT
   const groupH = narrow ? 58 : 46
   const barH = narrow ? 20 : 16
-  const H = PRAYERS.length * groupH + 24
+  const H = labels.length * groupH + 24
 
   return (
     <section className="chart">
-      <h2>On time by prayer</h2>
-      <p className="muted">Share of the last 30 days each prayer was marked on time.</p>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="On-time rate by prayer, per person">
+      <h2>{title}</h2>
+      <p className="muted">{description}</p>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}, per person`}>
         {[0, 25, 50, 75, 100].map((t) => (
           <g key={t}>
             <line x1={LEFT + (plot * t) / 100} y1={8} x2={LEFT + (plot * t) / 100} y2={H - 22} className="grid" />
@@ -174,27 +207,35 @@ function PrayerBars({ users }) {
             </text>
           </g>
         ))}
-        {PRAYERS.map(({ key, label }, gi) => {
+        {labels.map((row, gi) => {
           const top = gi * groupH + 10
-          const inner = users.length * barH + (users.length - 1) * 2
+          const inner = data.length * barH + (data.length - 1) * 2
           return (
-            <g key={key}>
+            <g key={row.key}>
               <text x={LEFT - 10} y={top + inner / 2 + 4} className="cat" textAnchor="end">
-                {label}
+                {row.label}
               </text>
-              {users.map((u, ui) => {
-                const row = u.byPrayer.find((p) => p.prayer === key)
-                const value = pct(row.ontime, row.possible)
+              {data.map((u, ui) => {
+                const cell = u.rows[gi]
+                const value = pct(cell.value, cell.total)
                 const w = (plot * value) / 100
                 const y = top + ui * (barH + 2)
                 return (
                   <g key={u.email}>
-                    {w >= 1 && <path d={barPath(LEFT, y, w, barH)} fill={u.color} />}
+                    {w >= 1 && (
+                      <motion.path
+                        initial={reduced ? false : { opacity: 0 }}
+                        animate={{ d: barPath(LEFT, y, w, barH), opacity: 1 }}
+                        transition={{ duration: reduced ? 0 : 0.5, delay: reduced ? 0 : gi * 0.04 }}
+                        d={barPath(LEFT, y, w, barH)}
+                        fill={u.color}
+                      />
+                    )}
                     <text x={LEFT + w + 8} y={y + barH - 3} className="value">
                       {value}%
                     </text>
                     <title>
-                      {u.name} · {label}: {row.ontime} of {row.possible} days on time
+                      {u.name} · {row.label}: {cell.value} of {cell.total} days
                     </title>
                   </g>
                 )
@@ -234,7 +275,7 @@ function WeeklyTrend({ users }) {
 
   return (
     <section className="chart">
-      <h2>Weekly on-time rate</h2>
+      <h2>Weekly sholat on-time rate</h2>
       <p className="muted">Last eight weeks. The current week counts only the days so far.</p>
       <div className="plot">
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Weekly on-time rate per person, last eight weeks">
@@ -262,7 +303,16 @@ function WeeklyTrend({ users }) {
             const last = u.weekly.length - 1
             return (
               <g key={u.email}>
-                <path d={d} fill="none" stroke={u.color} strokeWidth="2" strokeLinejoin="round" />
+                <motion.path
+                  d={d}
+                  fill="none"
+                  stroke={u.color}
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                />
                 {u.weekly.map((w, i) => (
                   <circle
                     key={w.week}
@@ -299,10 +349,7 @@ function WeeklyTrend({ users }) {
           />
         </svg>
         {hover !== null && (
-          <div
-            className="tooltip"
-            style={{ left: `${Math.min(82, Math.max(18, (x(hover) / W) * 100))}%` }}
-          >
+          <div className="tooltip" style={{ left: `${Math.min(82, Math.max(18, (x(hover) / W) * 100))}%` }}>
             <strong>Week of {weekLabel(weeks[hover].week)}</strong>
             {users.map((u) => (
               <span key={u.email}>

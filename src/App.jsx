@@ -1,21 +1,10 @@
 import { useEffect, useState } from 'react'
-import {
-  api,
-  DAYS,
-  PRAYERS,
-  LEVEL_INFO,
-  nextLevel,
-  mondayOf,
-  shiftWeek,
-  dateOf,
-  dayIndex,
-  fmt,
-  fmtLong,
-  ymd,
-} from './api.js'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { api, DAYS, LEVEL_INFO, GOOD, mondayOf, shiftWeek, dateOf, dayIndex, fmt, fmtLong, ymd } from './api.js'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
 import Logo from './Logo.jsx'
+import Ring from './Ring.jsx'
 
 export default function App() {
   const [me, setMe] = useState(undefined) // undefined = still checking, null = signed out
@@ -51,7 +40,7 @@ export default function App() {
           <Logo />
           <div>
             <h1>Daily Routines</h1>
-            <p className="tagline">{onDashboard ? 'Sholat analytics' : 'Tasks and sholat, week by week'}</p>
+            <p className="tagline">{onDashboard ? 'How the two of you are doing' : 'Tasks and routines, day by day'}</p>
           </div>
         </div>
 
@@ -68,7 +57,17 @@ export default function App() {
           </span>
         </nav>
 
-        {onDashboard ? <Dashboard /> : <Routines me={me} />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={onDashboard ? 'dash' : 'routines'}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.2, 0.8, 0.3, 1] }}
+          >
+            {onDashboard ? <Dashboard /> : <Routines me={me} />}
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   )
@@ -79,6 +78,7 @@ function Routines({ me }) {
   const [anchor, setAnchor] = useState(() => ymd(new Date()))
   const [tasks, setTasks] = useState([])
   const [marks, setMarks] = useState([])
+  const reduced = useReducedMotion()
 
   const week = mondayOf(anchor)
   const today = ymd(new Date())
@@ -92,10 +92,15 @@ function Routines({ me }) {
   // stepping between days then costs nothing
   useEffect(() => {
     api(`/api/tasks?week=${week}`).then(setTasks)
-    api(`/api/sholat?week=${week}`).then(setMarks)
+    api(`/api/routines?week=${week}`).then(setMarks)
   }, [week])
 
   const step = (n) => setAnchor(daily ? ymd(dateOf(anchor, n)) : shiftWeek(week, n))
+
+  const openDay = (date) => {
+    setAnchor(ymd(date))
+    setView('day')
+  }
 
   const add = async (day, text) => {
     const task = await api('/api/tasks', { method: 'POST', body: JSON.stringify({ week, day, text }) })
@@ -112,15 +117,15 @@ function Routines({ me }) {
     await api(`/api/tasks/${task.id}`, { method: 'DELETE' })
   }
 
-  const setLevel = async (date, prayer, level) => {
+  const setLevel = async (date, item, level) => {
     setMarks((m) => {
-      const rest = m.filter((x) => !(x.email === me.email && x.date === date && x.prayer === prayer))
-      return level ? [...rest, { email: me.email, date, prayer, level }] : rest
+      const rest = m.filter((x) => !(x.email === me.email && x.date === date && x.item === item))
+      return level ? [...rest, { email: me.email, date, item, level }] : rest
     })
     try {
-      await api('/api/sholat', { method: 'PUT', body: JSON.stringify({ date, prayer, level }) })
+      await api('/api/routines', { method: 'PUT', body: JSON.stringify({ date, item, level }) })
     } catch {
-      api(`/api/sholat?week=${week}`).then(setMarks) // put it back the way the server sees it
+      api(`/api/routines?week=${week}`).then(setMarks) // put it back the way the server sees it
     }
   }
 
@@ -132,12 +137,12 @@ function Routines({ me }) {
     <>
       <div className="weekbar">
         <div className="viewtoggle" role="group" aria-label="View">
-          <button className={daily ? '' : 'on'} onClick={() => setView('week')}>
-            Week
-          </button>
-          <button className={daily ? 'on' : ''} onClick={() => setView('day')}>
-            Day
-          </button>
+          {['week', 'day'].map((v) => (
+            <button key={v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>
+              {view === v && !reduced && <motion.span layoutId="viewpill" className="pill" transition={spring} />}
+              <span>{v === 'week' ? 'Week' : 'Day'}</span>
+            </button>
+          ))}
         </div>
         <button onClick={() => step(-1)} aria-label={daily ? 'Previous day' : 'Previous week'}>
           ‹
@@ -152,41 +157,47 @@ function Routines({ me }) {
           Today
         </button>
         <span className="count">
-          {done}/{visible.length} done
+          {done}/{visible.length} tasks done
         </span>
       </div>
 
-      <div className="scale">
-        {Object.entries(LEVEL_INFO).map(([key, info]) => (
-          <span key={key || 'none'}>
-            <b className={`lv-${key || 'none'}`}>{info.mark}</b> {info.label}
-          </span>
-        ))}
-      </div>
-
-      <div className={daily ? 'grid one' : 'grid'}>
+      <motion.div
+        className={daily ? 'grid one' : 'grid'}
+        initial="hidden"
+        animate="shown"
+        variants={{ shown: { transition: { staggerChildren: reduced ? 0 : 0.035 } } }}
+      >
         {shown.map((day) => (
           <Day
-            key={day}
+            key={`${week}-${day}`}
             me={me}
             name={DAYS[day]}
             day={day}
             date={dateOf(week, day)}
             isToday={ymd(dateOf(week, day)) === today}
+            compact={!daily}
             tasks={tasks.filter((t) => t.day === day)}
             marks={marks}
             onAdd={add}
             onToggle={toggle}
             onRemove={remove}
             onLevel={setLevel}
+            onOpenDay={openDay}
           />
         ))}
-      </div>
+      </motion.div>
     </>
   )
 }
 
-function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRemove, onLevel }) {
+const spring = { type: 'spring', stiffness: 420, damping: 34 }
+
+const cardIn = {
+  hidden: { opacity: 0, y: 10 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.2, 0.8, 0.3, 1] } },
+}
+
+function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onToggle, onRemove, onLevel, onOpenDay }) {
   const [text, setText] = useState('')
   const iso = ymd(date)
   const future = iso > ymd(new Date())
@@ -199,23 +210,41 @@ function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRe
 
   // whoever is signed in goes first, so your own row is the one under your thumb
   const people = [...me.users].sort((a, b) => (a.email === me.email ? -1 : b.email === me.email ? 1 : 0))
+  const levelOf = (email, item) =>
+    marks.find((m) => m.email === email && m.date === iso && m.item === item)?.level || ''
+
+  const scoreFor = (email) => {
+    const kept = me.routines.filter((r) => GOOD.has(levelOf(email, r.key))).length
+    return { kept, total: me.routines.length }
+  }
 
   return (
-    <section className={`card d${day}${isToday ? ' today' : ''}`}>
+    <motion.section variants={cardIn} className={`card d${day}${isToday ? ' today' : ''}`}>
       <header>
         <h2>{name}</h2>
         <span className="date">{fmt(date)}</span>
       </header>
+
       <ul>
-        {tasks.map((t) => (
-          <li key={t.id} className={t.done ? 'done' : ''}>
-            <span onClick={() => onToggle(t)}>{t.text}</span>
-            <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} />
-            <button className="del" onClick={() => onRemove(t)} aria-label={`Delete ${t.text}`}>
-              ×
-            </button>
-          </li>
-        ))}
+        <AnimatePresence initial={false}>
+          {tasks.map((t) => (
+            <motion.li
+              key={t.id}
+              layout
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={spring}
+              className={t.done ? 'done' : ''}
+            >
+              <span onClick={() => onToggle(t)}>{t.text}</span>
+              <input type="checkbox" checked={!!t.done} onChange={() => onToggle(t)} />
+              <button className="del" onClick={() => onRemove(t)} aria-label={`Delete ${t.text}`}>
+                ×
+              </button>
+            </motion.li>
+          ))}
+        </AnimatePresence>
       </ul>
       <input
         className="add"
@@ -226,41 +255,58 @@ function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRe
         aria-label={`Add task to ${name}`}
       />
 
-      <div className="sholat">
-        <div className="sholat-head">
-          <span>Sholat</span>
-          {PRAYERS.map((p) => (
-            <abbr key={p.key} title={p.label}>
-              {p.short}
-            </abbr>
-          ))}
-        </div>
+      <div className="routines">
         {people.map(({ email, name: who, levels }) => {
           const mine = email === me.email
+          const { kept, total } = scoreFor(email)
+
+          if (compact)
+            return (
+              <button className="summary" key={email} onClick={() => onOpenDay(date)}>
+                <Ring value={kept} max={total} size={34} />
+                <span className={mine ? 'me' : ''}>{who}</span>
+                <span className="muted">
+                  {kept}/{total}
+                </span>
+              </button>
+            )
+
           return (
-            <div className="sholat-row" key={email}>
-              <span className={mine ? 'me' : ''}>{who}</span>
-              {PRAYERS.map((p) => {
-                const level = marks.find((m) => m.email === email && m.date === iso && m.prayer === p.key)?.level || ''
-                const info = LEVEL_INFO[level]
-                const description = `${who} · ${p.label} on ${iso}: ${info.label}`
-                return (
-                  <button
-                    key={p.key}
-                    className={`lv lv-${level || 'none'}`}
-                    disabled={!mine || future}
-                    onClick={() => onLevel(iso, p.key, nextLevel(level, levels))}
-                    title={mine ? `${description} — tap to change` : description}
-                    aria-label={description}
-                  >
-                    {info.mark}
-                  </button>
-                )
-              })}
+            <div className="person" key={email}>
+              <h3>
+                <Ring value={kept} max={total} size={30} />
+                <span className={mine ? 'me' : ''}>{who}</span>
+                <span className="muted">
+                  {kept}/{total}
+                </span>
+              </h3>
+              <div className="routine-list">
+                {me.routines.map((r) => {
+                  const level = levelOf(email, r.key)
+                  return (
+                    <label key={r.key}>
+                      <span>{r.label}</span>
+                      <select
+                        className={`lv-${level || 'none'}`}
+                        value={level}
+                        disabled={!mine || future}
+                        onChange={(e) => onLevel(iso, r.key, e.target.value || null)}
+                        aria-label={`${who} · ${r.label} on ${iso}`}
+                      >
+                        {['', ...levels[r.kind]].map((key) => (
+                          <option key={key || 'none'} value={key}>
+                            {LEVEL_INFO[key].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
           )
         })}
       </div>
-    </section>
+    </motion.section>
   )
 }
