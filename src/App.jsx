@@ -1,41 +1,70 @@
 import { useEffect, useState } from 'react'
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-// monday of the week containing `d`, as YYYY-MM-DD
-function mondayOf(d) {
-  const m = new Date(d)
-  m.setHours(12, 0, 0, 0)
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7))
-  return m.toISOString().slice(0, 10)
-}
-
-const shiftWeek = (week, n) => {
-  const d = new Date(week + 'T12:00:00')
-  d.setDate(d.getDate() + n * 7)
-  return mondayOf(d)
-}
-
-const dateOf = (week, day) => {
-  const d = new Date(week + 'T12:00:00')
-  d.setDate(d.getDate() + day)
-  return d
-}
-
-const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-
-const api = (url, opts) =>
-  fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts }).then((r) =>
-    r.status === 204 ? null : r.json()
-  )
+import { api, DAYS, PRAYERS, mondayOf, shiftWeek, dateOf, fmt, ymd } from './api.js'
+import Login from './Login.jsx'
+import Dashboard from './Dashboard.jsx'
 
 export default function App() {
+  const [me, setMe] = useState(undefined) // undefined = still checking, null = signed out
+  const [hash, setHash] = useState(location.hash)
+
+  useEffect(() => {
+    api('/api/me')
+      .then(setMe)
+      .catch(() => setMe(null))
+  }, [])
+
+  useEffect(() => {
+    const onHash = () => setHash(location.hash)
+    addEventListener('hashchange', onHash)
+    return () => removeEventListener('hashchange', onHash)
+  }, [])
+
+  const signOut = async () => {
+    await api('/api/logout', { method: 'POST' })
+    setMe(null)
+  }
+
+  if (me === undefined) return <p className="boot">Loading…</p>
+  if (!me) return <Login onSignedIn={setMe} />
+
+  const onDashboard = hash.startsWith('#/dashboard')
+
+  return (
+    <div className="page">
+      <div className="cover" />
+      <main>
+        <div className="icon">{onDashboard ? '📊' : '✅'}</div>
+        <h1>{onDashboard ? 'Sholat analytics' : 'Weekly Checklist'}</h1>
+
+        <nav className="nav">
+          <a href="#/" className={onDashboard ? '' : 'on'}>
+            Checklist
+          </a>
+          <a href="#/dashboard" className={onDashboard ? 'on' : ''}>
+            Analytics
+          </a>
+          <span className="who">
+            {me.name}
+            <button onClick={signOut}>Sign out</button>
+          </span>
+        </nav>
+
+        {onDashboard ? <Dashboard /> : <Checklist me={me} />}
+      </main>
+    </div>
+  )
+}
+
+function Checklist({ me }) {
   const [week, setWeek] = useState(mondayOf(new Date()))
   const [tasks, setTasks] = useState([])
-  const today = mondayOf(new Date()) === week ? (new Date().getDay() + 6) % 7 : -1
+  const [marks, setMarks] = useState([])
+  const todayWeek = mondayOf(new Date())
+  const today = todayWeek === week ? (new Date().getDay() + 6) % 7 : -1
 
   useEffect(() => {
     api(`/api/tasks?week=${week}`).then(setTasks)
+    api(`/api/sholat?week=${week}`).then(setMarks)
   }, [week])
 
   const add = async (day, text) => {
@@ -53,60 +82,80 @@ export default function App() {
     await api(`/api/tasks/${task.id}`, { method: 'DELETE' })
   }
 
+  const markSholat = async (date, prayer, ontime) => {
+    setMarks((m) =>
+      ontime
+        ? [...m, { email: me.email, date, prayer }]
+        : m.filter((x) => !(x.email === me.email && x.date === date && x.prayer === prayer))
+    )
+    try {
+      await api('/api/sholat', { method: 'PUT', body: JSON.stringify({ date, prayer, ontime }) })
+    } catch {
+      api(`/api/sholat?week=${week}`).then(setMarks) // put it back the way the server sees it
+    }
+  }
+
   const done = tasks.filter((t) => t.done).length
 
   return (
-    <div className="page">
-      <div className="cover" />
-      <main>
-        <div className="icon">✅</div>
-        <h1>Weekly Checklist</h1>
-        <p className="intro">
-          Here, you will be adding your day-to-day tasks and as you accomplish them, you will check them off the list -
-        </p>
+    <>
+      <p className="intro">
+        Here, you will be adding your day-to-day tasks and as you accomplish them, you will check them off the list -
+      </p>
 
-        <div className="weekbar">
-          <button onClick={() => setWeek(shiftWeek(week, -1))}>‹</button>
-          <span className="range">
-            {fmt(dateOf(week, 0))} – {fmt(dateOf(week, 6))}
-          </span>
-          <button onClick={() => setWeek(shiftWeek(week, 1))}>›</button>
-          <button className="today" onClick={() => setWeek(mondayOf(new Date()))}>
-            Today
-          </button>
-          <span className="count">
-            {done}/{tasks.length} done
-          </span>
-        </div>
+      <div className="weekbar">
+        <button onClick={() => setWeek(shiftWeek(week, -1))} aria-label="Previous week">
+          ‹
+        </button>
+        <span className="range">
+          {fmt(dateOf(week, 0))} – {fmt(dateOf(week, 6))}
+        </span>
+        <button onClick={() => setWeek(shiftWeek(week, 1))} aria-label="Next week">
+          ›
+        </button>
+        <button className="today" onClick={() => setWeek(mondayOf(new Date()))}>
+          Today
+        </button>
+        <span className="count">
+          {done}/{tasks.length} done
+        </span>
+      </div>
 
-        <div className="grid">
-          {DAYS.map((name, day) => (
-            <Day
-              key={day}
-              name={name}
-              day={day}
-              date={dateOf(week, day)}
-              isToday={day === today}
-              tasks={tasks.filter((t) => t.day === day)}
-              onAdd={add}
-              onToggle={toggle}
-              onRemove={remove}
-            />
-          ))}
-        </div>
-      </main>
-    </div>
+      <div className="grid">
+        {DAYS.map((name, day) => (
+          <Day
+            key={day}
+            me={me}
+            name={name}
+            day={day}
+            date={dateOf(week, day)}
+            isToday={day === today}
+            tasks={tasks.filter((t) => t.day === day)}
+            marks={marks}
+            onAdd={add}
+            onToggle={toggle}
+            onRemove={remove}
+            onMark={markSholat}
+          />
+        ))}
+      </div>
+    </>
   )
 }
 
-function Day({ name, day, date, isToday, tasks, onAdd, onToggle, onRemove }) {
+function Day({ me, name, day, date, isToday, tasks, marks, onAdd, onToggle, onRemove, onMark }) {
   const [text, setText] = useState('')
+  const iso = ymd(date)
+  const future = iso > ymd(new Date())
 
   const submit = (e) => {
     if (e.key !== 'Enter' || !text.trim()) return
     onAdd(day, text)
     setText('')
   }
+
+  // whoever is signed in goes first, so your own row is the one under your thumb
+  const people = [...me.users].sort((a, b) => (a.email === me.email ? -1 : b.email === me.email ? 1 : 0))
 
   return (
     <section className={`card d${day}${isToday ? ' today' : ''}`}>
@@ -133,6 +182,38 @@ function Day({ name, day, date, isToday, tasks, onAdd, onToggle, onRemove }) {
         placeholder="+ Add"
         aria-label={`Add task to ${name}`}
       />
+
+      <div className="sholat">
+        <div className="sholat-head">
+          <span>Sholat on time</span>
+          {PRAYERS.map((p) => (
+            <abbr key={p.key} title={p.label}>
+              {p.short}
+            </abbr>
+          ))}
+        </div>
+        {people.map(({ email, name: who }) => {
+          const mine = email === me.email
+          return (
+            <div className="sholat-row" key={email}>
+              <span className={mine ? 'me' : ''}>{who}</span>
+              {PRAYERS.map((p) => {
+                const on = marks.some((m) => m.email === email && m.date === iso && m.prayer === p.key)
+                return (
+                  <input
+                    key={p.key}
+                    type="checkbox"
+                    checked={on}
+                    disabled={!mine || future}
+                    onChange={() => onMark(iso, p.key, !on)}
+                    aria-label={`${who} ${p.label} on ${iso}${mine ? '' : ' (read only)'}`}
+                  />
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
     </section>
   )
 }

@@ -3,6 +3,9 @@
 React + Express + SQLite (via libSQL). Runs off a local file on your machine,
 off a hosted [Turso](https://turso.tech) database when `TURSO_DATABASE_URL` is set.
 
+A shared weekly task list, a per-person record of which prayers were on time, and
+one analytics page comparing the two. Two accounts, password login, no sign-up.
+
 ## Local
 
 ```bash
@@ -17,8 +20,16 @@ npm run build
 npm start          # http://localhost:3001
 ```
 
-Env: `PORT` (default 3001), `DB_PATH` (default `./data.db`),
-`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (use a hosted DB instead of the local file).
+Copy `.env.example` to `.env.local` and fill it in — the server reads that file
+automatically. Values already in the environment win, so CI and Vercel override it.
+
+| Variable | Why |
+|---|---|
+| `SESSION_SECRET` | signs the session cookie; changing it signs everyone out |
+| `PASSWORD_SINGGIH`, `PASSWORD_TITIS` | one per account. **Unset means login always fails** |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | hosted DB; without them it uses a local file |
+| `APP_TZ` | day boundaries (default `Asia/Jakarta`) |
+| `PORT`, `DB_PATH` | local only — default 3001 and `./data.db` |
 
 ## Hosting
 
@@ -62,12 +73,14 @@ function (`vercel.json` routes every `/api/*` request to it). No disk, so the da
 2. On [vercel.com/new](https://vercel.com/new), import this repo. The Vite preset is detected;
    leave the build settings alone.
 
-3. Add both env vars from step 1 (Settings → Environment Variables), then deploy.
+3. Add every variable from the table above (Settings → Environment Variables), then
+   deploy. `SESSION_SECRET` and the two passwords are required — login fails closed
+   without them, which locks *everyone* out, not just strangers.
 
 Redeploys never touch the data — it lives in Turso, not in the build.
 
-**The API has no auth**, so anyone with the URL can read and delete every task. Fine for a
-private link, not for anything you'd mind losing.
+Every `/api` route except `/api/login` requires a session, so the URL alone gets a
+stranger nothing but the login form.
 
 ### Render
 
@@ -157,7 +170,8 @@ Backup = `cp data.db data.db.bak` (or `sqlite3 data.db ".backup out.db"` while r
 ## Database
 
 SQLite, reached through `@libsql/client` — a local file in dev, Turso in production.
-Single table:
+
+`tasks` — shared by both accounts:
 
 | column | meaning |
 |---|---|
@@ -166,9 +180,34 @@ Single table:
 | `text` | task text (max 500 chars) |
 | `done` | 0/1 |
 
+`sholat` — per account. **A row means that prayer was on time; no row means it
+wasn't.** Unchecked is the absence of data, so nothing has to be written to start
+a day, and unchecking deletes rather than updates.
+
+| column | meaning |
+|---|---|
+| `email` | whose mark it is; you can only write your own |
+| `date` | `YYYY-MM-DD` in `APP_TZ` |
+| `prayer` | `subuh` / `dzuhur` / `ashar` / `maghrib` / `isya` |
+
+Primary key is all three, so marking twice is a no-op rather than a duplicate.
+
 Swap to Postgres only if you outgrow it — 4 queries in `server.js` change, nothing else.
+
+## Auth
+
+Two hardcoded accounts in `server.js`; passwords come from env vars and are never
+stored in the database or the repo. The session is an HMAC-signed cookie —
+`HttpOnly`, `SameSite=Lax`, `Secure` in production, and a ten-year `Max-Age`, so
+nobody gets signed out in practice. Signing out clears it; rotating
+`SESSION_SECRET` invalidates every session at once.
+
+There is **no login rate limit** — serverless has no shared counter, and the
+generated passwords are long random strings. If that stops being true, add an
+attempt counter in Turso.
 
 ## Not included
 
-No auth (anyone with the URL edits everything), no drag-reorder, no recurring tasks.
-Add auth first if it faces the public internet.
+No sign-up, no password reset (rotate the env var), no drag-reorder, no recurring
+tasks. Tasks are shared between both accounts by design; only sholat marks are
+per-person.
