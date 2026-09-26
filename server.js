@@ -18,7 +18,7 @@ const db = createClient(
 // list decides who is let in. Any other Google account is bounced at the callback.
 const USERS = {
   'singgih.rochmad@gmail.com': { name: 'Singgih', masjid: true },
-  'titis.ekaaprilia@gmail.com': { name: 'Titis' },
+  'titis.ekaaprilia@gmail.com': { name: 'Titis', haid: true },
 }
 
 // Two kinds of routine. Worst to best; no row at all is the extra state at the
@@ -26,15 +26,23 @@ const USERS = {
 const KINDS = {
   sholat: ['sholat', 'ontime', 'masjid'],
   done: ['done'],
+  haid: ['haid'],
 }
 const ON_TIME = new Set(['ontime', 'masjid'])
 
-// praying in the masjid is a thing only one of them does
-const levelsFor = (email, kind) =>
-  kind === 'sholat' && !USERS[email]?.masjid ? KINDS.sholat.filter((l) => l !== 'masjid') : KINDS[kind]
+// Praying in the masjid is a thing only one of them does, and only one of them
+// menstruates. An empty list means the routine does not apply to that person at
+// all, so it is never shown and can never be written.
+const levelsFor = (email, kind) => {
+  if (kind === 'sholat') return USERS[email]?.masjid ? KINDS.sholat : KINDS.sholat.filter((l) => l !== 'masjid')
+  if (kind === 'haid') return USERS[email]?.haid ? KINDS.haid : []
+  return KINDS[kind]
+}
 
 // The day in order, so the list reads top to bottom like the day happens.
 const ROUTINES = [
+  // governs the whole day, so it sits above everything it affects
+  { key: 'haid', label: 'Dalam haid', kind: 'haid' },
   { key: 'sholat_subuh', label: 'Sholat Subuh', kind: 'sholat' },
   { key: 'mengaji_subuh', label: 'Mengaji pagi', kind: 'done' },
   { key: 'olahraga_pagi', label: 'Olahraga pagi', kind: 'done' },
@@ -53,6 +61,15 @@ ROUTINES.find((r) => r.key === 'sholat_isya').kind = 'sholat'
 const BY_KEY = Object.fromEntries(ROUTINES.map((r) => [r.key, r]))
 const SHOLAT = ROUTINES.filter((r) => r.kind === 'sholat')
 const HABITS = ROUTINES.filter((r) => r.kind === 'done')
+
+// Routines that count towards a person's score on a given day. On a haid day the
+// prayers are not owed, so they are not counted as missed either.
+const appliesTo = (email, item, haid) => {
+  const r = BY_KEY[item]
+  if (!r || r.kind === 'haid') return false // the flag is a state, not an achievement
+  if (!levelsFor(email, r.kind).length) return false
+  return !(haid && r.kind === 'sholat')
+}
 
 const roster = () =>
   Object.entries(USERS).map(([email, u]) => ({
@@ -402,9 +419,20 @@ app.get(
 
     const byUser = {}
     for (const [email, user] of Object.entries(USERS)) {
+      const haid = (d) => at(email, d, 'haid') === 'haid'
+      // prayers are not owed on a haid day, so those days leave the denominator
+      const owed = (dates) => dates.filter((d) => !haid(d))
+
       const tally = (dates) => {
-        const out = { ontime: 0, masjid: 0, prayed: 0, possible: dates.length * SHOLAT.length }
-        for (const d of dates)
+        const days = owed(dates)
+        const out = {
+          ontime: 0,
+          masjid: 0,
+          prayed: 0,
+          possible: days.length * SHOLAT.length,
+          haidDays: dates.length - days.length,
+        }
+        for (const d of days)
           for (const { key } of SHOLAT) {
             const level = at(email, d, key)
             if (!level) continue
@@ -416,13 +444,14 @@ app.get(
       }
 
       const byPrayer = SHOLAT.map(({ key, label }) => {
-        const levels = last30.map((d) => at(email, d, key))
+        const days = owed(last30)
+        const levels = days.map((d) => at(email, d, key))
         return {
           item: key,
           label: label.replace(/^Sholat /, ''),
           ontime: levels.filter((l) => l && ON_TIME.has(l)).length,
           prayed: levels.filter(Boolean).length,
-          possible: last30.length,
+          possible: days.length,
         }
       })
 
@@ -433,13 +462,13 @@ app.get(
         possible: last30.length,
       }))
 
-      // consecutive days back from today with all five prayers on time (today is
-      // still in progress, so it can extend a streak but never break one)
+      // consecutive days back from today with all five prayers on time. A haid
+      // day neither extends the streak nor breaks it — it is simply skipped.
       let streak = 0
       for (let i = 0; i < 365; i++) {
         const d = addDays(now, -i)
-        const complete = SHOLAT.every(({ key }) => ON_TIME.has(at(email, d, key)))
-        if (complete) streak++
+        if (haid(d)) continue
+        if (SHOLAT.every(({ key }) => ON_TIME.has(at(email, d, key)))) streak++
         else if (i > 0) break
       }
 
@@ -480,19 +509,22 @@ export const buildReport = ({ date, rows, tasks }) => {
   const mine = tasks.filter((t) => t.day === day)
 
   const people = Object.entries(USERS).map(([email, user]) => {
-    const kept = ROUTINES.filter((r) => level(email, r.key)).length
-    const missed = ROUTINES.filter((r) => !level(email, r.key)).map((r) => r.label)
-    const sholat = SHOLAT.map((r) => ({ label: r.label.replace('Sholat ', ''), level: level(email, r.key) }))
+    const haid = level(email, 'haid') === 'haid'
+    const owed = ROUTINES.filter((r) => appliesTo(email, r.key, haid))
+    const sholat = haid
+      ? []
+      : SHOLAT.map((r) => ({ label: r.label.replace('Sholat ', ''), level: level(email, r.key) }))
     return {
       email,
       name: user.name,
-      kept,
-      total: ROUTINES.length,
+      haid,
+      kept: owed.filter((r) => level(email, r.key)).length,
+      total: owed.length,
       sholat,
       onTime: sholat.filter((p) => ON_TIME.has(p.level)).length,
       late: sholat.filter((p) => p.level === 'sholat').length,
       masjid: sholat.filter((p) => p.level === 'masjid').length,
-      missed,
+      missed: owed.filter((r) => !level(email, r.key)).map((r) => r.label),
     }
   })
 
@@ -509,9 +541,11 @@ export const buildReport = ({ date, rows, tasks }) => {
   for (const p of people) {
     lines.push(`${p.name} — ${p.kept}/${p.total} routines`)
     lines.push(
-      `  Sholat: ${p.onTime}/${SHOLAT.length} on time` +
-        (p.masjid ? ` (${p.masjid} in the masjid)` : '') +
-        (p.late ? `, ${p.late} late` : '')
+      p.haid
+        ? '  Dalam haid — sholat tidak dihitung hari ini'
+        : `  Sholat: ${p.onTime}/${SHOLAT.length} on time` +
+            (p.masjid ? ` (${p.masjid} in the masjid)` : '') +
+            (p.late ? `, ${p.late} late` : '')
     )
     lines.push(p.missed.length ? `  Missed: ${p.missed.join(', ')}` : '  Nothing missed — a clean day.')
     lines.push('')
@@ -568,11 +602,17 @@ export const buildReport = ({ date, rows, tasks }) => {
       <div style="height:10px;font-size:0">&nbsp;</div>
       ${bar(p.kept, p.total)}
       <div style="height:16px;font-size:0">&nbsp;</div>
-      ${pills(p)}
+      ${
+        p.haid
+          ? `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#f3e8ef;color:#8a4f76;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:700">Dalam haid</td></tr></table>`
+          : pills(p)
+      }
       <div style="height:12px;font-size:0">&nbsp;</div>
-      <p style="margin:0;font-size:14px;color:${INK}">
-        <strong>${p.onTime}/${SHOLAT.length}</strong> sholat on time${p.masjid ? ` &middot; <span style="color:#1c5cab;font-weight:600">${p.masjid} in the masjid</span>` : ''}${p.late ? ` &middot; <span style="color:#b98a3a">${p.late} late</span>` : ''}
-      </p>
+      <p style="margin:0;font-size:14px;color:${INK}">${
+        p.haid
+          ? 'Sholat tidak dihitung hari ini.'
+          : `<strong>${p.onTime}/${SHOLAT.length}</strong> sholat on time${p.masjid ? ` &middot; <span style="color:#1c5cab;font-weight:600">${p.masjid} in the masjid</span>` : ''}${p.late ? ` &middot; <span style="color:#b98a3a">${p.late} late</span>` : ''}`
+      }</p>
       <p style="margin:6px 0 0;font-size:13px;color:${MUTED}">${
         p.missed.length ? `Missed: ${esc(p.missed.join(', '))}` : '&#10003; Nothing missed &mdash; a clean day.'
       }</p>

@@ -38,6 +38,13 @@ const SHAPES = {
       <rect x="16.6" y="8.6" width="1.7" height="8.4" rx="0.85" fill="currentColor" />
     </>
   ),
+  // struck-through ring: not owed today, so neither kept nor missed
+  haid: (
+    <>
+      <circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6.5 10h7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </>
+  ),
 }
 SHAPES.done = SHAPES.ontime
 

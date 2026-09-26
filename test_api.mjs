@@ -142,7 +142,9 @@ try {
   assert.deepEqual(rosterOf(SINGGIH).levels.sholat, ['sholat', 'ontime', 'masjid'], 'masjid is his to use')
   assert.deepEqual(rosterOf(TITIS).levels.sholat, ['sholat', 'ontime'], 'and not hers')
   assert.deepEqual(rosterOf(TITIS).levels.done, ['done'], 'the plain routines are the same for both')
-  assert.equal(me.routines.length, 12, 'five prayers plus seven other routines')
+  assert.deepEqual(rosterOf(TITIS).levels.haid, ['haid'], 'haid is hers')
+  assert.deepEqual(rosterOf(SINGGIH).levels.haid, [], 'and does not apply to him at all')
+  assert.equal(me.routines.length, 13, 'five prayers, seven other routines, and the haid flag')
   assert.equal(me.routines.filter((r) => r.kind === 'sholat').length, 5)
   assert.ok(
     me.routines.some((r) => r.key === 'minum_vitamin' && r.kind === 'done'),
@@ -186,6 +188,7 @@ try {
   // the two kinds do not share a scale
   assert.equal((await put({ date: iso(), item: 'olahraga_pagi', level: 'masjid' })).status, 400, 'a habit is not a prayer')
   assert.equal((await put({ date: iso(), item: 'sholat_subuh', level: 'done' })).status, 400, 'a prayer is not a habit')
+  assert.equal((await put({ date: iso(), item: 'haid', level: 'haid' })).status, 400, 'haid does not apply to him')
 
   await put({ date: iso(), item: 'sholat_subuh', level: 'sholat' })
   await put({ date: iso(), item: 'sholat_isya', level: 'ontime' })
@@ -278,12 +281,57 @@ try {
     cookie = saved
   }
 
+  // ---- haid ---------------------------------------------------------------
+  // (still signed in as Titis from the isolation block above)
+  {
+    const day = iso(-1) // yesterday, so today's marks are left alone
+    for (const item of ['sholat_subuh', 'sholat_dzuhur']) await put({ date: day, item, level: 'ontime' })
+
+    const before = (await json('/api/stats')).byUser[TITIS]
+    assert.equal(before.last30.possible, 150, 'every day is owed to start with')
+
+    assert.equal((await put({ date: day, item: 'haid', level: 'haid' })).status, 200, 'she can set it')
+    const marks = await json(`/api/routines?week=${mondayOf(day)}`)
+    assert.ok(marks.some((m) => m.item === 'haid' && m.email === TITIS), 'stored as one row, not five')
+    assert.ok(
+      marks.some((m) => m.item === 'sholat_subuh' && m.email === TITIS && m.level === 'ontime'),
+      'her existing prayer marks are kept, not destroyed'
+    )
+
+    const after = (await json('/api/stats')).byUser[TITIS]
+    assert.equal(after.last30.possible, 145, 'that day leaves the denominator (29 days x 5)')
+    assert.equal(after.last30.haidDays, 1, 'and is reported as such')
+    assert.equal(after.last30.ontime, before.last30.ontime - 2, 'its prayers leave the numerator too')
+    assert.equal(
+      after.byPrayer.find((p) => p.item === 'sholat_subuh').possible,
+      29,
+      'per-prayer denominators drop as well'
+    )
+    // the habits still count — only the prayers are excused
+    assert.equal(after.byRoutine.find((r) => r.item === 'makan').possible, 30)
+
+    const him = (await json('/api/stats')).byUser[SINGGIH]
+    assert.equal(him.last30.possible, 150, 'his days are untouched by her flag')
+
+    // clearing it puts the day back
+    await put({ date: day, item: 'haid', level: null })
+    const cleared = (await json('/api/stats')).byUser[TITIS]
+    assert.equal(cleared.last30.possible, 150, 'the day is owed again')
+    assert.equal(cleared.last30.ontime, before.last30.ontime, 'and the kept marks come back')
+  }
+
   // ---- logout -------------------------------------------------------------
   assert.equal((await call('/api/logout', { method: 'POST' })).status, 204)
   cookie = ''
   assert.equal((await call('/api/me')).status, 401, 'signed out again')
 
   console.log('ok')
+} catch (err) {
+  // without this the finally below exits 0 before the throw is ever reported,
+  // so a failing test looks exactly like a passing one
+  console.error('\nFAILED:', err.message)
+  if (err.expected !== undefined) console.error('  expected:', err.expected, '\n  actual:  ', err.actual)
+  process.exitCode = 1
 } finally {
   stub.close()
   for (const suffix of ['', '-wal', '-shm']) rmSync(dbPath + suffix, { force: true })

@@ -47,10 +47,12 @@ export const LEVEL_INFO = {
   ontime: { label: 'On time' },
   masjid: { label: 'On time in masjid' },
   done: { label: 'Done' },
+  haid: { label: 'Dalam haid' },
 }
 
-// anything recorded counts towards the day's progress; only these count as "well"
-export const GOOD = new Set(['ontime', 'masjid', 'done'])
+// Anything recorded counts towards the day's progress — a late prayer is still a
+// prayer. Lateness is surfaced separately rather than by withholding the tick.
+export const kept = (level) => Boolean(level)
 
 export const dayIndex = (week, date) =>
   Math.round((new Date(`${date}T12:00:00`) - new Date(`${week}T12:00:00`)) / 86400000)

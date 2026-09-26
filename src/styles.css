@@ -306,6 +306,14 @@ h1 { font-size: 36px; margin: 0; letter-spacing: -0.02em; }
 .lv-sholat { color: #8a6d3b; }
 .lv-ontime, .lv-done { color: #2e7d52; }
 .lv-masjid { color: #1c5cab; }
+.lv-haid { color: #8a4f76; }
+
+/* the flag that governs the day, and the rows it excuses */
+.routine-list label.haid { background: #faf3f7; }
+.routine-list label.haid .name { color: #8a4f76; font-weight: 600; }
+.routine-list label.haid input[type='checkbox'] { accent-color: #8a4f76; }
+.routine-list label.excused .name { color: var(--muted); }
+.routine-list label.excused .ctl em { font-size: 12px; font-style: normal; color: #8a4f76; }
 .viewtoggle { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .viewtoggle button {
   position: relative;

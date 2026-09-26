@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { api, DAYS, LEVEL_INFO, GOOD, mondayOf, shiftWeek, dateOf, dayIndex, fmt, fmtLong, ymd } from './api.js'
+import { api, DAYS, LEVEL_INFO, kept as isKept, mondayOf, shiftWeek, dateOf, dayIndex, fmt, fmtLong, ymd } from './api.js'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
 import Logo from './Logo.jsx'
@@ -224,9 +224,19 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
   const levelOf = (email, item) =>
     marks.find((m) => m.email === email && m.date === iso && m.item === item)?.level || ''
 
-  const scoreFor = (email) => {
-    const kept = me.routines.filter((r) => GOOD.has(levelOf(email, r.key))).length
-    return { kept, total: me.routines.length }
+  const onHaid = (email) => levelOf(email, 'haid') === 'haid'
+
+  // Which routines a person owes today: the ones their account has at all, minus
+  // the haid flag itself (a state, not an achievement), minus the prayers on a
+  // haid day — they are not owed, so they must not read as missed.
+  const owedBy = (levels, haid) =>
+    me.routines.filter(
+      (r) => r.kind !== 'haid' && (levels[r.kind] || []).length > 0 && !(haid && r.kind === 'sholat')
+    )
+
+  const scoreFor = (email, levels) => {
+    const owed = owedBy(levels, onHaid(email))
+    return { kept: owed.filter((r) => isKept(levelOf(email, r.key))).length, total: owed.length }
   }
 
   return (
@@ -269,7 +279,8 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
       <div className="routines">
         {people.map(({ email, name: who, levels }) => {
           const mine = email === me.email
-          const { kept, total } = scoreFor(email)
+          const haid = onHaid(email)
+          const { kept, total } = scoreFor(email, levels)
 
           if (compact)
             return (
@@ -299,42 +310,54 @@ function Day({ me, name, day, date, isToday, compact, tasks, marks, onAdd, onTog
                 </span>
               </h3>
               <div className="routine-list">
-                {me.routines.map((r) => {
-                  const level = levelOf(email, r.key)
-                  const label = `${who} · ${r.label} on ${iso}`
-                  return (
-                    <label key={r.key} className={r.kind === 'done' ? 'plain' : ''}>
-                      <StatusIcon level={level} title={LEVEL_INFO[level].label} />
-                      <span className="name">{r.label}</span>
-                      <span className="ctl">
-                        {/* a scale needs a scale; done-or-not only needs a box */}
-                        {r.kind === 'done' ? (
-                          <input
-                            type="checkbox"
-                            checked={level === 'done'}
-                            disabled={!mine || future}
-                            onChange={(e) => onLevel(iso, r.key, e.target.checked ? 'done' : null)}
-                            aria-label={label}
-                          />
-                        ) : (
-                          <select
-                            className={`lv-${level || 'none'}`}
-                            value={level}
-                            disabled={!mine || future}
-                            onChange={(e) => onLevel(iso, r.key, e.target.value || null)}
-                            aria-label={label}
-                          >
-                            {['', ...levels[r.kind]].map((key) => (
-                              <option key={key || 'none'} value={key}>
-                                {LEVEL_INFO[key].label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </span>
-                    </label>
-                  )
-                })}
+                {me.routines
+                  .filter((r) => (levels[r.kind] || []).length > 0)
+                  .map((r) => {
+                    const level = levelOf(email, r.key)
+                    const label = `${who} · ${r.label} on ${iso}`
+                    const allowed = levels[r.kind]
+                    // on a haid day the prayers are excused, not missed
+                    const excused = haid && r.kind === 'sholat'
+                    return (
+                      <label
+                        key={r.key}
+                        className={`${allowed.length === 1 ? 'plain' : ''}${r.kind === 'haid' ? ' haid' : ''}${
+                          excused ? ' excused' : ''
+                        }`}
+                      >
+                        <StatusIcon level={excused ? 'haid' : level} title={excused ? 'Dalam haid' : LEVEL_INFO[level].label} />
+                        <span className="name">{r.label}</span>
+                        <span className="ctl">
+                          {/* one level means done-or-not, which is a box; a scale needs a scale */}
+                          {excused ? (
+                            <em>Dalam haid</em>
+                          ) : allowed.length === 1 ? (
+                            <input
+                              type="checkbox"
+                              checked={level === allowed[0]}
+                              disabled={!mine || future}
+                              onChange={(e) => onLevel(iso, r.key, e.target.checked ? allowed[0] : null)}
+                              aria-label={label}
+                            />
+                          ) : (
+                            <select
+                              className={`lv-${level || 'none'}`}
+                              value={level}
+                              disabled={!mine || future}
+                              onChange={(e) => onLevel(iso, r.key, e.target.value || null)}
+                              aria-label={label}
+                            >
+                              {['', ...allowed].map((key) => (
+                                <option key={key || 'none'} value={key}>
+                                  {LEVEL_INFO[key].label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </span>
+                      </label>
+                    )
+                  })}
               </div>
             </div>
           )

@@ -227,6 +227,23 @@ The twelve routines come in two kinds, listed in the order the day happens:
 |---|---|---|
 | `sholat` | Subuh, Dzuhur, Ashar, Maghrib, Isya | `sholat` < `ontime` < `masjid` |
 | `done` | Mengaji pagi, Olahraga pagi, Mandi pagi, Mandi sore, Mengaji habis Maghrib, Makan, Minum vitamin | `done` |
+| `haid` | Dalam haid | `haid` |
+
+### Haid
+
+`levelsFor` returns an **empty** list for a kind that does not apply to someone,
+and an empty list means the routine is neither shown nor writable. That is how
+`masjid` stays Singgih's and `haid` stays Titis's — one rule, enforced on the
+server, not two special cases in the UI.
+
+Setting the flag writes **one** row, not five. The prayers are then excused for
+that day: they leave both the numerator and the denominator, everywhere —
+the day's score becomes out of seven rather than twelve, per-prayer rates count
+29 days instead of 30, and a haid day neither extends a streak nor breaks it.
+Prayers are not owed, so counting them as missed would be wrong.
+
+Any prayer marks already recorded for that day are **kept**, not deleted. Clearing
+the flag brings them back.
 
 The control follows the kind: a prayer gets a dropdown because it has a scale to
 pick from, a habit gets a checkbox because it only has two states. Beside each row
