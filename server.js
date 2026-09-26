@@ -78,7 +78,9 @@ const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !Number.isNaN(parse
 
 // ---- sessions --------------------------------------------------------------
 
-const SECRET = process.env.SESSION_SECRET
+const env = (name) => (process.env[name] || '').trim() || undefined
+
+const SECRET = env('SESSION_SECRET')
 const COOKIE = 'session'
 // "no expiry" as far as anyone will notice; a cookie must carry some max-age
 const TEN_YEARS = 10 * 365 * 24 * 60 * 60 * 1000
@@ -116,9 +118,9 @@ const readCookie = (req, name) => {
 // stub. Nothing sets either in production, where they stay Google's.
 const GOOGLE_AUTH = process.env.OAUTH_AUTH_ENDPOINT || 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN = process.env.OAUTH_TOKEN_ENDPOINT || 'https://oauth2.googleapis.com/token'
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || 'http://localhost:5173/api/auth/callback'
+const CLIENT_ID = env('GOOGLE_CLIENT_ID')
+const CLIENT_SECRET = env('GOOGLE_CLIENT_SECRET')
+const REDIRECT_URI = env('OAUTH_REDIRECT_URI') || 'http://localhost:5173/api/auth/callback'
 const FLOW = 'oauth_flow' // short-lived: carries state, nonce and the PKCE verifier
 
 const configured = () => Boolean(SECRET && CLIENT_ID && CLIENT_SECRET)
@@ -607,19 +609,18 @@ export const buildReport = ({ date, rows, tasks }) => {
   return { subject: `Daily Routines — ${pretty}`, text: lines.join('\n'), html, people }
 }
 
-const appUrl = () =>
-  (process.env.APP_URL || 'https://weekly-checklist-xnk2.vercel.app').replace(/\/+$/, '')
+const appUrl = () => (env('APP_URL') || 'https://weekly-checklist-xnk2.vercel.app').replace(/\/+$/, '')
 
 // Brevo verifies a single sender address with an emailed code, so this works
 // without owning a domain — which matters, since the app lives on a vercel.app
 // subdomain. Plain HTTP, no SMTP client to carry.
 const sendEmail = async ({ subject, text, html }) => {
-  const to = (process.env.REPORT_TO || '')
+  const to = (env('REPORT_TO') || '')
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean)
-  const key = process.env.BREVO_API_KEY
-  const from = process.env.REPORT_FROM
+  const key = env('BREVO_API_KEY')
+  const from = env('REPORT_FROM')
   if (!key || !from || !to.length) throw new Error('email is not configured')
 
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -642,8 +643,9 @@ const sendEmail = async ({ subject, text, html }) => {
 app.get(
   '/api/cron/daily-report',
   route(async (req, res) => {
-    const secret = process.env.CRON_SECRET
-    if (!secret || req.headers.authorization !== `Bearer ${secret}`) return res.sendStatus(401)
+    const secret = env('CRON_SECRET')
+    const offered = (req.headers.authorization || '').trim()
+    if (!secret || offered !== `Bearer ${secret}`) return res.sendStatus(401)
 
     const date = isDate(req.query.date) ? req.query.date : today()
     const week = mondayOf(date)
